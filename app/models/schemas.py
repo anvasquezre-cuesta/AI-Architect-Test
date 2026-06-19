@@ -1,4 +1,8 @@
-from pydantic import BaseModel
+"""Pydantic request/response schemas for the API."""
+
+from typing import List
+
+from pydantic import BaseModel, Field
 
 
 class BoundingBox(BaseModel):
@@ -6,6 +10,7 @@ class BoundingBox(BaseModel):
     y: float
     width: float
     height: float
+    page_number: int = 0
 
 
 class ExtractedName(BaseModel):
@@ -20,7 +25,9 @@ class FuzzyMatch(BaseModel):
 
 
 class ExtractionResponse(BaseModel):
-    extracted_names: list[ExtractedName]
+    extracted_names: List[ExtractedName]
+    # Previously computed but dropped because it was missing from the schema.
+    fuzzy_matches: List[FuzzyMatch] = Field(default_factory=list)
 
 
 class NamePair(BaseModel):
@@ -34,3 +41,5 @@ class RAGRequest(BaseModel):
 
 class RAGResponse(BaseModel):
     answer: str
+    # Source chunks used to ground the answer (transparency / citations).
+    sources: List[str] = Field(default_factory=list)
