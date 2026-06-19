@@ -14,7 +14,10 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Install CPU-only torch first so the resolver does not pull the multi-GB CUDA
+# wheels (this is a CPU inference service); sentence-transformers then reuses it.
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install -r requirements.txt
 
 # Bake the ML models into the image so the container boots offline and fast,
 # instead of downloading ~80MB on first request.
