@@ -1,14 +1,24 @@
+"""`/api/extract` — extract names + bounding boxes and fuzzy-match them."""
+
+import json
+import logging
 import os
 import tempfile
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.models.schemas import ExtractionResponse
-from app.services.ocr_service import extract_text_from_pdf
 from app.services.bbox_service import find_name_bounding_boxes
 from app.services.fuzzy_service import fuzzy_match_names
+from app.services.ocr_service import extract_text_from_pdf
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _looks_like_pdf(upload: UploadFile, content: bytes) -> bool:
+    """Validate by magic bytes or declared content type."""
+    return content[:5] == b"%PDF-" or upload.content_type == "application/pdf"
 
 
 @router.post("/extract", response_model=ExtractionResponse)
@@ -16,19 +26,24 @@ def extract_names_from_pdf(
     pdf_file: UploadFile = File(...),
     names: str = Form(...),
 ):
-    """Extract names from PDF and perform fuzzy matching."""
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    tmp.write(pdf_file.file.read())
-    tmp.close()
+    """Extract names from a PDF and fuzzy-match them against the query names."""
+    content = pdf_file.file.read()
+    if not _looks_like_pdf(pdf_file, content):
+        raise HTTPException(status_code=400, detail="Uploaded file is not a PDF")
 
     try:
-        text = extract_text_from_pdf(tmp.name)
-
-        name_boxes = find_name_bounding_boxes(tmp.name, text)
-
-        import json
-
         query_names = json.loads(names)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail="`names` must be a valid JSON array"
+        ) from exc
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    tmp.write(content)
+    tmp.close()
+    try:
+        text = extract_text_from_pdf(tmp.name)
+        name_boxes = find_name_bounding_boxes(tmp.name, text)
 
         extracted_name_strings = [nb["name"] for nb in name_boxes]
         matches = fuzzy_match_names(extracted_name_strings, query_names)
@@ -42,6 +57,7 @@ def extract_names_from_pdf(
                         "y": nb["y"],
                         "width": nb["width"],
                         "height": nb["height"],
+                        "page_number": nb.get("page", 0),
                     },
                 }
                 for nb in name_boxes
