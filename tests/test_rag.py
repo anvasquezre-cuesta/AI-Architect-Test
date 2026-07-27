@@ -64,12 +64,13 @@ class TestGenerateAnswer:
         """
         captured_prompt = {}
 
-        def mock_post(url, **kwargs):
+        async def mock_post(url, **kwargs):
             captured_prompt["content"] = kwargs["json"]["messages"][0]["content"]
             mock_resp = MagicMock()
             mock_resp.json.return_value = {
                 "choices": [{"message": {"content": "Test answer"}}]
             }
+            mock_resp.raise_for_status = MagicMock()
             return mock_resp
 
         mock_chunks = [{"text": "Some context", "score": 0.9}]
@@ -82,12 +83,13 @@ class TestGenerateAnswer:
             patch(
                 "app.services.rag_service.search_similar", return_value=mock_chunks
             ),
-            patch("app.services.rag_service.httpx.post", side_effect=mock_post),
+            patch("httpx.AsyncClient.post", side_effect=mock_post),
             patch("app.services.rag_service.OPENAI_API_KEY", "test-key"),
         ):
-            from app.services.rag_service import generate_answer
-
-            generate_answer("What is the project about?")
+            from app.services.rag_service import generate_answer, reset_default_rag_service
+            reset_default_rag_service()
+            import asyncio
+            asyncio.run(generate_answer("What is the project about?"))
 
         prompt = captured_prompt["content"]
         assert "What is the project about?" in prompt, (
@@ -107,7 +109,7 @@ class TestGenerateAnswer:
             patch("app.services.rag_service.search_similar", return_value=[]),
         ):
             from app.services.rag_service import generate_answer
-
-            result = generate_answer("Any question?")
+            import asyncio
+            result = asyncio.run(generate_answer("Any question?"))
 
         assert "No relevant information found" in result["answer"]

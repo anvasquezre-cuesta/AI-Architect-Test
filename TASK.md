@@ -91,8 +91,8 @@ python -m venv venv
 source venv/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
 
+pip install -r requirements.txt
 # Download spaCy model
 python -m spacy download en_core_web_sm
 
@@ -112,16 +112,16 @@ As part of your submission, fill in the tables below documenting every bug you f
 
 ### Bugs Found & Fixed
 
-| # | File | Bug Description | How You Fixed It |
-|---|------|-----------------|------------------|
-| 1 |      |                 |                  |
-| 2 |      |                 |                  |
-| 3 |      |                 |                  |
-| 4 |      |                 |                  |
-| 5 |      |                 |                  |
-| 6 |      |                 |                  |
-| 7 |      |                 |                  |
-| 8 |      |                 |                  |
+| # | File                              | Bug Description                                              | How You Fixed It |
+|---|-----------------------------------|--------------------------------------------------------------|------------------|
+| 1 | app/services/embedding_service.py | ModuleNotFoundError: No module named 'sentence_transformers' |                  |
+| 2 |                                   |                                                              |                  |
+| 3 |                                   |                                                              |                  |
+| 4 |                                   |                                                              |                  |
+| 5 |                                   |                                                              |                  |
+| 6 |                                   |                                                              |                  |
+| 7 |                                   |                                                              |                  |
+| 8 |                                   |                                                              |                  |
 
 (add more rows as needed)
 
@@ -148,3 +148,36 @@ As part of your submission, fill in the tables below documenting every bug you f
 ## Submission
 
 Create a branch and make a pull request to this repository.
+
+
+## EXTRACT API TESTING
+
+python3 -m uvicorn app.api.extract:router --host 0.0.0.0 --port 8000 & sleep 5 && curl -X POST http://localhost:8003/extract -F "pdf_file=@/Users/gama/repo-AIarchitect/sample_pdfs/company_memo.pdf" -F 'names=[{"first_name": "Sarah", "last_name": "Williams"}]' && kill $!
+
+python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+Note: In the code, app/api/extract.py has a __main__ block that runs uvicorn.run(router, ...) on port 8003, but it only includes the extraction router. Running app.main:app is preferred as it includes all routes.
+
+curl -X POST http://127.0.0.1:8000/api/extract \
+  -F "pdf_file=@sample_pdfs/company_memo.pdf" \
+  -F "names=[{'first_name': 'Margaret', 'last_name': 'Thompson'}]"
+
+
+## RAG API TESTING
+
+curl -X GET http://localhost:8000/health
+
+curl -X POST "http://localhost:8000/api/ingest" \
+       -F "pdf_file=@sample_pdfs/meeting_minutes.pdf"
+
+curl -X POST "http://localhost:8000/api/ask" \
+    -H "Content-Type: application/json" \
+    -d '{"question": "What were the main topics discussed in the meeting?"}'
+
+
+## FINDINGS, IMPROVEMENTS, PRACTICES
+
+See file Task-Findings-Practices.md
+
+
+

@@ -39,14 +39,14 @@ class TestExtractEndpoint:
 
         with (
             patch(
-                "app.api.extract.extract_text_from_pdf", return_value="John Smith"
+                "app.api.extract.OCRService.extract_text_from_pdf", return_value="John Smith"
             ),
             patch(
-                "app.api.extract.find_name_bounding_boxes",
+                "app.api.extract.OCRService.find_name_bounding_boxes",
                 return_value=mock_name_boxes,
             ),
             patch(
-                "app.api.extract.fuzzy_match_names", return_value=mock_matches
+                "app.api.extract.FuzzyService.fuzzy_match_names", return_value=mock_matches
             ),
         ):
             response = app_client.post(
@@ -75,13 +75,13 @@ class TestExtractEndpoint:
 
         with (
             patch(
-                "app.api.extract.extract_text_from_pdf", return_value="John Smith"
+                "app.api.extract.OCRService.extract_text_from_pdf", return_value="John Smith"
             ),
             patch(
-                "app.api.extract.find_name_bounding_boxes",
+                "app.api.extract.OCRService.find_name_bounding_boxes",
                 return_value=mock_name_boxes,
             ),
-            patch("app.api.extract.fuzzy_match_names", return_value=[]),
+            patch("app.api.extract.FuzzyService.fuzzy_match_names", return_value=[]),
         ):
             response = app_client.post(
                 "/api/extract",

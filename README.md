@@ -42,10 +42,45 @@ instructions for running the containerized application and accessing the API end
     g. If you were to add LLM routing (selecting different models based on query complexity),
        how would you implement it?
 
+## Containerization and Running
+
+The application is containerized using Docker and Docker Compose.
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+- OpenAI API Key
+
+### Configuration
+
+Create a `.env` file in the root directory (or update the existing one) with your configuration:
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+### Running the Application
+
+To build and start the application and all its dependencies (like Qdrant):
+
+```bash
+docker-compose up --build
+```
+
+The API will be available at `http://localhost:8000`.
+
+### API Endpoints
+
+- **Health Check**: `GET http://localhost:8000/api/health`
+- **Name Extraction**: `POST http://localhost:8000/api/extract` (Accepts PDF and names list)
+- **RAG Ingest**: `POST http://localhost:8000/api/ingest` (Accepts PDF)
+- **RAG Ask**: `POST http://localhost:8000/api/ask` (Accepts question)
+
 ## Test Steps:
 
 1. **Set up the Development Environment:**
-   - Create a new Python virtual environment and install the required libraries (e.g., PyMuPDF, Tesseract OCR, spaCy, Hugging Face Transformers, FastAPI or Flask).
+   - Create a new Python virtual environment and install the required libraries (e.g., PyMuPDF, EasyOCR, spaCy, Hugging Face Transformers, FastAPI or Flask).
    - Obtain a sample scanned PDF document containing names and last names for testing purposes.
 
 2. **Implement Text Extraction from PDF:**
@@ -57,7 +92,7 @@ instructions for running the containerized application and accessing the API end
    - Alternatively, use a pre-trained NER (e.g., BERT, RoBERTa) from the Hugging Face Transformers library for the named entity recognition task. It is easier to use a Generative LLM for zero-shot NER and return the response as a usable JSON.
 
 4. **Parse Bounding Box Coordinates:**
-   - Integrate the OCR library (e.g., Tesseract OCR) to obtain the bounding box coordinates of the recognized words in the PDF document.
+   - Integrate the OCR library (e.g., EasyOCR) to obtain the bounding box coordinates of the recognized words in the PDF document.
    - Match the extracted names and last names with their corresponding bounding box coordinates from the OCR results.
 
 5. **Implement the RESTful API:**

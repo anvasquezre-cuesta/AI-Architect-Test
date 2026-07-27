@@ -86,7 +86,10 @@ class TestSearchSimilar:
         mock_hit = MagicMock()
         mock_hit.payload = {"text": "relevant chunk"}
         mock_hit.score = 0.85
-        mock_qdrant_client.search.return_value = [mock_hit]
+        
+        mock_result = MagicMock()
+        mock_result.points = [mock_hit]
+        mock_qdrant_client.query_points.return_value = mock_result
 
         from app.services.vector_service import search_similar
 

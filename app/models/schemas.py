@@ -6,6 +6,7 @@ class BoundingBox(BaseModel):
     y: float
     width: float
     height: float
+    page_number: int
 
 
 class ExtractedName(BaseModel):
@@ -21,6 +22,10 @@ class FuzzyMatch(BaseModel):
 
 class ExtractionResponse(BaseModel):
     extracted_names: list[ExtractedName]
+    fuzzy_matches: list[FuzzyMatch]
+    
+    class Config:
+        extra = "allow"
 
 
 class NamePair(BaseModel):
@@ -34,3 +39,7 @@ class RAGRequest(BaseModel):
 
 class RAGResponse(BaseModel):
     answer: str
+    sources: list[str]
+    
+    class Config:
+        extra = "allow"

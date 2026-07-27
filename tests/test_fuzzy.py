@@ -50,12 +50,14 @@ class TestFuzzyMatchNames:
 
     def test_close_match_above_threshold(self):
         """Names with minor typos should still match at 90% threshold."""
-        from app.services.fuzzy_service import fuzzy_match_names
+        from app.services.fuzzy_service import FuzzyService
 
+        # Initialize with explicit threshold to ensure test stability
+        service = FuzzyService(threshold=90)
         extracted = ["John Smith"]
         query = [{"first_name": "John", "last_name": "Smth"}]  # minor typo
 
-        matches = fuzzy_match_names(extracted, query)
+        matches = service.match_names(extracted, query)
 
         assert len(matches) == 1
         assert matches[0]["score"] >= 0.9
