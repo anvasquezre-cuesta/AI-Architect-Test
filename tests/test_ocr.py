@@ -35,15 +35,17 @@ class TestExtractTextFromPDF:
         mock_doc.__getitem__ = MagicMock(side_effect=lambda i: mock_pages[i])
 
         with (
-            patch("app.services.ocr_service.fitz.open", return_value=mock_doc),
-            patch(
-                "app.services.ocr_service.pytesseract.image_to_string",
-                side_effect=[f"Page {i} text" for i in range(3)],
-            ),
+            patch("app.services.ocr_service.pymupdf.open", return_value=mock_doc),
+            patch("app.services.ocr_service.easyocr.Reader") as mock_reader,
         ):
-            from app.services.ocr_service import extract_text_from_pdf
+            mock_instance = mock_reader.return_value
+            mock_instance.readtext.side_effect = [
+                [[None, f"Page {i} text", 0.95]] for i in range(3)
+            ]
+            from app.services.ocr_service import OCRService
 
-            result = extract_text_from_pdf("test.pdf")
+            ocr_service = OCRService()
+            result = ocr_service.extract_text_from_pdf("test.pdf")
 
         # Should contain text from ALL 3 pages including page 0
         assert "Page 0 text" in result, "First page text is missing — off-by-one bug"
@@ -55,10 +57,14 @@ class TestExtractTextFromPDF:
         mock_doc = MagicMock()
         mock_doc.__len__ = MagicMock(return_value=0)
 
-        with patch("app.services.ocr_service.fitz.open", return_value=mock_doc):
-            from app.services.ocr_service import extract_text_from_pdf
+        with (
+            patch("app.services.ocr_service.pymupdf.open", return_value=mock_doc),
+            patch("app.services.ocr_service.easyocr.Reader"),
+        ):
+            from app.services.ocr_service import OCRService
 
-            result = extract_text_from_pdf("empty.pdf")
+            ocr_service = OCRService()
+            result = ocr_service.extract_text_from_pdf("empty.pdf")
 
         assert result == ""
 
@@ -69,10 +75,14 @@ class TestExtractTextFromPDF:
         mock_doc = MagicMock()
         mock_doc.__len__ = MagicMock(return_value=0)
 
-        with patch("app.services.ocr_service.fitz.open", return_value=mock_doc):
-            from app.services.ocr_service import extract_text_from_pdf
+        with (
+            patch("app.services.ocr_service.pymupdf.open", return_value=mock_doc),
+            patch("app.services.ocr_service.easyocr.Reader"),
+        ):
+            from app.services.ocr_service import OCRService
 
-            extract_text_from_pdf("test.pdf")
+            ocr_service = OCRService()
+            ocr_service.extract_text_from_pdf("test.pdf")
 
         mock_doc.close.assert_called_once()
 
@@ -102,25 +112,22 @@ class TestGetWordBoundingBoxes:
 
         mock_doc.__getitem__ = MagicMock(return_value=page)
 
-        ocr_data = {
-            "text": ["Hello"],
-            "left": [150],  # 150px at 150 DPI = 1 inch = 72 PDF points
-            "top": [300],
-            "width": [200],
-            "height": [30],
-            "conf": [95],
-        }
+        # EasyOCR format: (bbox, text, confidence)
+        # bbox: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+        ocr_data = [
+            [[[150, 300], [350, 300], [350, 330], [150, 330]], "Hello", 0.95]
+        ]
 
         with (
-            patch("app.services.ocr_service.fitz.open", return_value=mock_doc),
-            patch(
-                "app.services.ocr_service.pytesseract.image_to_data",
-                return_value=ocr_data,
-            ),
+            patch("app.services.ocr_service.pymupdf.open", return_value=mock_doc),
+            patch("app.services.ocr_service.easyocr.Reader") as mock_easyocr,
         ):
-            from app.services.ocr_service import get_word_bounding_boxes
+            mock_instance = mock_easyocr.return_value
+            mock_instance.readtext.return_value = ocr_data
+            from app.services.ocr_service import OCRService
 
-            results = get_word_bounding_boxes("test.pdf")
+            ocr_service = OCRService()
+            results = ocr_service.get_word_bounding_boxes("test.pdf")
 
         assert len(results) == 1
         # At 150 DPI, 150px = 1 inch = 72 PDF points

@@ -48,6 +48,11 @@ def sample_word_boxes():
 @pytest.fixture
 def mock_qdrant_client():
     """Mock Qdrant client for testing without a running instance."""
-    with patch("app.services.vector_service.client") as mock_client:
+    from app.services.vector_service import reset_default_store
+    reset_default_store()
+    with patch("app.services.vector_service.QdrantClient") as mock_constructor:
+        mock_client = MagicMock()
+        mock_constructor.return_value = mock_client
         mock_client.get_collections.return_value = MagicMock(collections=[])
         yield mock_client
+    reset_default_store()

@@ -23,12 +23,16 @@ class TestExtractNames:
         ]
         mock_doc.ents = mock_ents
 
-        mock_nlp = MagicMock(return_value=mock_doc)
+        mock_model = MagicMock(side_effect=lambda x: mock_doc)
+        mock_spacy_model = MagicMock()
+        mock_spacy_model.get_instance.return_value = mock_model
 
-        with patch("app.services.ner_service.nlp", mock_nlp):
-            from app.services.ner_service import extract_names
+        with patch("app.services.ner_service.SpacyModel", mock_spacy_model):
+            from app.services.ner_service import NerService
 
-            result = extract_names("John Smith works at Acme Corp with Maria Garcia")
+            text = "John Smith works at Acme Corp with Maria Garcia"
+            ner_service = NerService(text)
+            result = ner_service.extract_names(include_orgs=False)
 
         assert "John Smith" in result
         assert "Maria Garcia" in result
@@ -40,12 +44,16 @@ class TestExtractNames:
         """Should return empty list when no person entities found."""
         mock_doc = MagicMock()
         mock_doc.ents = []
-        mock_nlp = MagicMock(return_value=mock_doc)
+        mock_model = MagicMock(side_effect=lambda x: mock_doc)
+        mock_spacy_model = MagicMock()
+        mock_spacy_model.get_instance.return_value = mock_model
 
-        with patch("app.services.ner_service.nlp", mock_nlp):
-            from app.services.ner_service import extract_names
+        with patch("app.services.ner_service.SpacyModel", mock_spacy_model):
+            from app.services.ner_service import NerService
 
-            result = extract_names("This text has no names in it.")
+            text = "This text has no names in it."
+            ner_service = NerService(text)
+            result = ner_service.extract_names()
 
         assert result == []
 
@@ -59,12 +67,16 @@ class TestExtractNames:
             MagicMock(text="MIT", label_="ORG"),
         ]
         mock_doc.ents = mock_ents
-        mock_nlp = MagicMock(return_value=mock_doc)
+        mock_model = MagicMock(side_effect=lambda x: mock_doc)
+        mock_spacy_model = MagicMock()
+        mock_spacy_model.get_instance.return_value = mock_model
 
-        with patch("app.services.ner_service.nlp", mock_nlp):
-            from app.services.ner_service import extract_names
+        with patch("app.services.ner_service.SpacyModel", mock_spacy_model):
+            from app.services.ner_service import NerService
 
-            result = extract_names("Sarah Williams visited New York in January 2024.")
+            text = "Sarah Williams visited New York in January 2024."
+            ner_service = NerService(text)
+            result = ner_service.extract_names(include_orgs=False)
 
         assert result == ["Sarah Williams"]
 
@@ -90,12 +102,16 @@ class TestExtractNamesWithPositions:
             ),
         ]
         mock_doc.ents = mock_ents
-        mock_nlp = MagicMock(return_value=mock_doc)
+        mock_model = MagicMock(side_effect=lambda x: mock_doc)
+        mock_spacy_model = MagicMock()
+        mock_spacy_model.get_instance.return_value = mock_model
 
-        with patch("app.services.ner_service.nlp", mock_nlp):
-            from app.services.ner_service import extract_names_with_positions
+        with patch("app.services.ner_service.SpacyModel", mock_spacy_model):
+            from app.services.ner_service import NerService
 
-            result = extract_names_with_positions("John Smith works at Google.")
+            text = "John Smith works at Google."
+            ner_service = NerService(text)
+            result = ner_service.extract_names_with_positions(include_orgs=False)
 
         assert len(result) == 1, "Should only return PERSON entities"
         assert result[0]["name"] == "John Smith"
