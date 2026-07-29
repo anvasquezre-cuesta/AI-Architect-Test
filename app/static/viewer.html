@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Name Extractor — Viewer</title>
+<script src="/static/vendor/pdf.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c2733; --muted: #5c6b7a;
+    --accent: #2563eb; --match: #16a34a; --nomatch: #d97706; --line: #e3e7ec;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+         background: var(--bg); color: var(--ink); }
+  header { padding: 18px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 24px 60px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+           padding: 16px; margin-bottom: 16px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+          letter-spacing: .04em; }
+  input[type=file], select, textarea {
+    font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: #fff; color: var(--ink);
+  }
+  textarea { width: 320px; height: 74px; resize: vertical; }
+  button { font: inherit; font-weight: 600; padding: 10px 22px; border: 0; border-radius: 8px;
+           background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { font-size: 14px; color: var(--muted); min-height: 20px; margin: 6px 0 0; }
+  #status.error { color: #dc2626; }
+  .legend { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+  .dot.match { background: var(--match); } .dot.nomatch { background: var(--nomatch); }
+  #matches table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  #matches th, #matches td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  #matches th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .page-wrap { position: relative; margin: 18px auto; width: fit-content;
+               box-shadow: 0 2px 12px rgba(16, 24, 40, .12); border-radius: 4px; overflow: hidden; }
+  .page-label { font-size: 12px; color: var(--muted); text-align: center; margin-top: 14px; }
+  .bbox { position: absolute; border: 2px solid var(--nomatch); background: rgba(217, 119, 6, .12);
+          border-radius: 2px; cursor: help; }
+  .bbox.match { border-color: var(--match); background: rgba(22, 163, 74, .14); }
+  .bbox:hover::after { content: attr(data-name); position: absolute; left: 0; top: -26px;
+    background: var(--ink); color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 4px;
+    white-space: nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PDF Name Extractor — Viewer</h1>
+  <p>Upload a PDF, extract person names, and see their bounding boxes drawn on the document.</p>
+</header>
+<main>
+  <div class="panel">
+    <div class="row">
+      <div class="field">
+        <label for="pdf">PDF file</label>
+        <input id="pdf" type="file" accept="application/pdf">
+      </div>
+      <div class="field">
+        <label for="names">Names to match (one per line: First Last)</label>
+        <textarea id="names" placeholder="Margaret Thompson&#10;Maria Gonzalez"></textarea>
+      </div>
+      <div class="field">
+        <label for="profile">Profile</label>
+        <select id="profile"></select>
+      </div>
+      <button id="run">Extract</button>
+    </div>
+    <div id="status"></div>
+    <div class="legend">
+      <span><span class="dot match"></span>Fuzzy-matched name</span>
+      <span><span class="dot nomatch"></span>Extracted (no match)</span>
+    </div>
+  </div>
+  <div id="matches" class="panel" hidden></div>
+  <div id="pages"></div>
+</main>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/static/vendor/pdf.worker.min.js";
+
+const $ = (id) => document.getElementById(id);
+const SCALE = 1.5; // render at 1.5x PDF points; boxes use the same scale
+
+async function loadProfiles() {
+  try {
+    const res = await fetch("/api/profiles");
+    const profiles = await res.json();
+    for (const p of profiles) {
+      const opt = document.createElement("option");
+      opt.value = p.key;
+      opt.textContent = p.key + (p.default ? " (default)" : "");
+      opt.title = p.description;
+      if (p.default) opt.selected = true;
+      $("profile").appendChild(opt);
+    }
+  } catch { /* profiles endpoint unavailable: leave selector empty */ }
+}
+
+function parseNames(raw) {
+  return raw.split("\n").map(l => l.trim()).filter(Boolean).map(line => {
+    const parts = line.split(/\s+/);
+    return { first_name: parts.slice(0, -1).join(" ") || parts[0],
+             last_name: parts.length > 1 ? parts[parts.length - 1] : parts[0] };
+  });
+}
+
+function setStatus(msg, isError = false) {
+  $("status").textContent = msg;
+  $("status").className = isError ? "error" : "";
+}
+
+function showMatches(matches) {
+  const panel = $("matches");
+  if (!matches.length) {
+    panel.innerHTML = "<em>No fuzzy matches at the 90% threshold.</em>";
+    panel.hidden = false;
+    return;
+  }
+  panel.innerHTML = "<table><tr><th>Requested name</th><th>Found in document</th><th>Score</th></tr>" +
+    matches.map(m => `<tr><td>${m.matched_name}</td><td>${m.extracted_name}</td>` +
+      `<td>${(m.score * 100).toFixed(0)}%</td></tr>`).join("") + "</table>";
+  panel.hidden = false;
+}
+
+async function renderPdfWithBoxes(file, extracted, matchedSet) {
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const container = $("pages");
+  container.innerHTML = "";
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: SCALE });
+
+    const wrap = document.createElement("div");
+    wrap.className = "page-wrap";
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    wrap.appendChild(canvas);
+
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+
+    // Overlay bounding boxes for this page (API coords are PDF points,
+    // top-left origin — same orientation as the canvas; just scale).
+    for (const item of extracted) {
+      const b = item.bounding_box;
+      if (b.page_number !== pageNum - 1) continue;
+      const div = document.createElement("div");
+      div.className = "bbox" + (matchedSet.has(item.name) ? " match" : "");
+      div.style.left = (b.x * SCALE) + "px";
+      div.style.top = (b.y * SCALE) + "px";
+      div.style.width = (b.width * SCALE) + "px";
+      div.style.height = (b.height * SCALE) + "px";
+      div.dataset.name = item.name;
+      wrap.appendChild(div);
+    }
+
+    const label = document.createElement("div");
+    label.className = "page-label";
+    label.textContent = `Page ${pageNum} / ${pdf.numPages}`;
+    container.appendChild(label);
+    container.appendChild(wrap);
+  }
+}
+
+$("run").addEventListener("click", async () => {
+  const file = $("pdf").files[0];
+  if (!file) { setStatus("Choose a PDF file first.", true); return; }
+
+  const fd = new FormData();
+  fd.append("pdf_file", file);
+  fd.append("names", JSON.stringify(parseNames($("names").value)));
+  if ($("profile").value) fd.append("profile", $("profile").value);
+
+  $("run").disabled = true;
+  setStatus("Extracting… (OCR can take a few seconds per page)");
+  try {
+    const res = await fetch("/api/extract", { method: "POST", body: fd });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || res.statusText);
+
+    const matchedSet = new Set(body.fuzzy_matches.map(m => m.extracted_name));
+    showMatches(body.fuzzy_matches);
+    await renderPdfWithBoxes(file, body.extracted_names, matchedSet);
+    setStatus(`Done: ${body.extracted_names.length} name occurrence(s), ` +
+              `${body.fuzzy_matches.length} fuzzy match(es).`);
+  } catch (err) {
+    setStatus("Error: " + err.message, true);
+  } finally {
+    $("run").disabled = false;
+  }
+});
+
+loadProfiles();
+</script>
+</body>
+</html>
