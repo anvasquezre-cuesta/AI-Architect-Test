@@ -87,3 +87,142 @@ instructions for running the containerized application and accessing the API end
 10. **Documentation and Submission:**
     - Document the code, and any external libraries or resources used.
     - Provide instructions for setting up and running the system, as well as any additional dependencies or requirements.
+
+---
+
+# Solution — How to Run
+
+## With Docker (recommended)
+
+```bash
+# Optional: export OPENAI_API_KEY=sk-... to enable LLM-generated answers.
+# Without it, /api/ask degrades gracefully to extractive answers.
+docker compose up --build
+```
+
+This starts the API on http://localhost:8000 (Swagger UI at `/docs`) and Qdrant on port 6333 with a persistent volume. Models (spaCy + MiniLM) are baked into the image at build time.
+
+### Fully local / open-source LLM (no external API)
+
+The LLM client speaks the OpenAI-compatible protocol, so any local server (Ollama, vLLM, LM Studio) works. An optional Ollama service is included behind a compose profile:
+
+```bash
+docker compose --profile local-llm up --build
+docker compose exec ollama ollama pull llama3.2   # once
+```
+
+Then run the API with:
+
+```bash
+OPENAI_BASE_URL=http://ollama:11434/v1 LLM_MODEL=llama3.2 OPENAI_API_KEY=ollama docker compose --profile local-llm up
+```
+
+With no LLM configured at all, `/api/ask` still works and returns an extractive answer built from the retrieved context.
+
+## Locally
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+# system dependency: tesseract-ocr must be installed (apt install tesseract-ocr)
+
+# Only needed for the spanish_precision / multilingual profiles:
+python -m spacy download es_core_news_sm
+python -m spacy download xx_ent_wiki_sm
+# apt install tesseract-ocr-spa
+
+docker run -p 6333:6333 qdrant/qdrant   # vector DB
+uvicorn app.main:app --reload
+```
+
+## Trying it out — two built-in UIs
+
+Once the stack is up, there are two ways to exercise the API without writing any code:
+
+| UI | URL | Best for |
+|---|---|---|
+| **Demo viewer** | [http://localhost:8000/](http://localhost:8000/) | Visual end-to-end test: upload a PDF, pick a model profile, and see the extracted names drawn as bounding boxes over the rendered document (green = fuzzy-matched, orange = extracted only), plus the match table with scores. |
+| **Swagger UI** (OpenAPI spec) | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive documentation auto-generated from the OpenAPI schema (`/openapi.json`). Covers **all** endpoints — including `/api/ingest` and `/api/ask` (RAG), which the viewer doesn't expose — with request/response schemas and "Try it out" forms. |
+
+Typical demo flow: open the viewer, upload `sample_pdfs/company_memo.pdf` with names `Margaret Thompson`, then switch to `sample_pdfs/memo_espanol.pdf` with the `spanish_precision` profile; use Swagger to ingest `research_report.pdf` and ask it a question.
+
+## Using the API
+
+```bash
+# Health
+curl http://localhost:8000/health
+
+# Extract names + bounding boxes + fuzzy matching
+curl -X POST http://localhost:8000/api/extract \
+  -F "pdf_file=@sample_pdfs/company_memo.pdf" \
+  -F 'names=[{"first_name":"Margaret","last_name":"Thompson"},{"first_name":"Maria","last_name":"Garcia"}]'
+
+# Ingest a PDF into the vector store
+curl -X POST http://localhost:8000/api/ingest \
+  -F "pdf_file=@sample_pdfs/research_report.pdf"
+
+# Ask a question (RAG)
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What is the research report about?"}'
+```
+
+## Model profiles (multi-language support)
+
+Instead of exposing internal model names, the API offers friendly **profiles** — like choosing a "fast" vs "thinking" tier on an LLM API. Each profile maps server-side to an OCR language, a spaCy NER model, an embedding model, and its own Qdrant collection (embeddings from different models live in incompatible vector spaces and are never mixed).
+
+| Profile | Use for | Internally |
+|---|---|---|
+| `english_fast` (default) | English documents, fastest | Tesseract `eng` · spaCy `en_core_web_sm` · MiniLM |
+| `spanish_precision` | Spanish documents, best free/offline quality | Tesseract `spa+eng` · **NER ensemble** (spaCy `es_lg` ∪ `xx`) · multilingual MiniLM |
+| `multilingual` | Mixed/unknown languages | Tesseract `eng+spa` · spaCy `xx_ent_wiki_sm` · multilingual MiniLM |
+| `llm_precision` | Highest NER accuracy, any language | Tesseract `eng+spa` · **zero-shot LLM NER** · multilingual MiniLM — requires `OPENAI_API_KEY` (or local Ollama); slower, per-token cost |
+
+```bash
+# Discover available profiles
+curl http://localhost:8000/api/profiles
+
+# Optional `profile` field on every endpoint (omit it → english_fast)
+curl -X POST http://localhost:8000/api/extract \
+  -F "pdf_file=@memo_espanol.pdf" \
+  -F 'names=[{"first_name":"Maria","last_name":"Gonzalez"}]' \
+  -F 'profile=spanish_precision'
+
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question":"¿De qué trata el informe?","profile":"spanish_precision"}'
+```
+
+An unknown profile returns `400` with the list of valid keys. Fuzzy matching is accent-insensitive (`Maria Gonzalez` matches `María González`) and works across all profiles. Note: baking the multilingual models into the Docker image adds ~500 MB; remove the corresponding lines in the `Dockerfile` if you only need English.
+
+Why `spanish_precision` uses the LARGE Spanish model in an ensemble — decision trail: `es_core_news_sm` and `es_core_news_md` both tag `'La señora Lucía Fernández'` as `MISC` and silently drop her; `es_core_news_lg` tags her `PER` correctly (a pure configuration upgrade — no code change), and the union with the multilingual model covers the remaining blind spots. The 90% fuzzy threshold downstream filters ensemble noise out of the matches. A Spanish-specific transformer NER (e.g. `PlanTL-GOB-ES/roberta-...-capitel-ner`, F1 ~90) was evaluated and deliberately deferred: the config-level fix resolves the known failure at zero extra latency, and the transformer remains the documented next step if recall regresses. A profile's name is a promise — the engine behind it can be upgraded without clients noticing, which is the point of the profile abstraction.
+
+Why `llm_precision` exists: even the ensemble inherits statistical noise (job titles tagged as people). Zero-shot LLM extraction returns clean, correct names in any language. Zero-shot LLM extraction handles honorifics, mixed languages, and noisy OCR correctly. Without an API key the profile fails fast with a `502` and a clear message (no silent fallback). It shares the multilingual embedding collection, since the embedding model — and therefore the vector space — is the same.
+
+### Getting and configuring the OpenAI API key
+
+The key enables two features at once: LLM-generated answers on `/api/ask` (instead of the extractive fallback) and the `llm_precision` NER profile. Note that API access is billed separately from ChatGPT (prepaid credits; `gpt-4o-mini` costs fractions of a cent per request).
+
+1. Go to [platform.openai.com](https://platform.openai.com) and sign in (this is the API console — not chatgpt.com).
+2. Add prepaid credit under **Settings → Billing** (minimum $5).
+3. Create a key under **API keys → Create new secret key** and copy it immediately — it is shown only once.
+4. Create a `.env` file next to `docker-compose.yml` (git-ignored, never commit the key):
+
+   ```
+   OPENAI_API_KEY=sk-your-key-here
+   ```
+
+5. `docker compose up` — compose reads `.env` automatically and passes the key to the API container.
+
+The key is server-side configuration only (12-Factor style): it is never accepted from clients per-request and never reaches the frontend. To use a fully local LLM instead (no key, no cost), see the Ollama profile above.
+
+## Tests
+
+```bash
+pytest -v        # 87 tests, no external services required (Qdrant is mocked)
+```
+
+Configuration is environment-driven (see `app/core/config.py`): `QDRANT_HOST`, `QDRANT_PORT`, `OCR_DPI`, `SIMILARITY_THRESHOLD`, `EMBEDDING_MODEL_NAME`, `LLM_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, etc.
+
+Architecture, tradeoffs, scaling and failure analysis: see [DESIGN.md](DESIGN.md). Bug-by-bug findings report: see the tables in [TASK.md](TASK.md).
