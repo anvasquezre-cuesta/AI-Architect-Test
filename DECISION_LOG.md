@@ -208,3 +208,15 @@ the refactor is core work, not polish.
      literal, so the AST audit passes while the unit tests' imports and patches keep working.
 - **Action:** Implement OCR first as the reference; replicate across services; add `app/dependencies.py`.
 - **Status:** `decided`.
+
+### D-10 — Containerization: app image + Qdrant service via Compose
+- **Context:** The task requires a Dockerfile and a docker-compose that includes the vector DB as a
+  service. Tesseract is a system binary (not a pip package) and the ML models must be present.
+- **Reasoning:** Base on `python:3.12-slim`; install the `tesseract-ocr` system package; pip-install
+  requirements; **bake the models into the image** (`spaCy en_core_web_sm` and the SBERT
+  `all-MiniLM-L6-v2` checkpoint) at build time so the container starts offline with no runtime
+  download — consistent with the fully-open, reproducible goal. Compose runs two services: `app`
+  and `qdrant` (official `qdrant/qdrant` image) with a persistent volume; `QDRANT_HOST=qdrant` is
+  injected via environment so the same image runs locally (`localhost`) or in Compose. `app` waits
+  on a Qdrant healthcheck. `OPENAI_*` stay optional env vars (RAG answer step only).
+- **Status:** `decided`.
