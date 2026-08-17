@@ -16,6 +16,10 @@ EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "pdf_documents")
+# Minimum cosine score for a retrieved chunk. Tunable: MiniLM cosine scores for
+# relevant chunks often fall in ~0.2-0.5, so the previous hardcoded 0.5 filtered
+# out valid context. Lower it to admit relevant chunks; raise it to be stricter.
+RETRIEVAL_SCORE_THRESHOLD = float(os.getenv("RETRIEVAL_SCORE_THRESHOLD", "0.2"))
 
 # NER
 SPACY_MODEL = os.getenv("SPACY_MODEL", "en_core_web_sm")

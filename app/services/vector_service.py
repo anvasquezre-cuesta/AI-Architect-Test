@@ -43,11 +43,13 @@ class QdrantVectorStore:
         embedder,
         collection_name: str = COLLECTION_NAME,
         vector_size: int = VECTOR_SIZE,
+        score_threshold: float = config.RETRIEVAL_SCORE_THRESHOLD,
     ) -> None:
         self._client = client
         self._embed = embedder
         self._collection = collection_name
         self._vector_size = vector_size
+        self._score_threshold = score_threshold
 
     def init_collection(self) -> None:
         existing = [c.name for c in self._client.get_collections().collections]
@@ -80,7 +82,7 @@ class QdrantVectorStore:
             collection_name=self._collection,
             query_vector=query_embedding,
             limit=top_k,
-            score_threshold=0.5,
+            score_threshold=self._score_threshold,
         )
         return [
             {"text": hit.payload["text"], "score": hit.score} for hit in results

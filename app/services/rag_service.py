@@ -85,6 +85,20 @@ class RAGService:
         if not relevant_chunks:
             return {"answer": _NO_CONTEXT_MESSAGE, "sources": []}
 
+        sources = [chunk["text"] for chunk in relevant_chunks]
+
+        # No LLM configured: return the retrieved context instead of attempting an
+        # unauthenticated call (which would fail with an opaque header error).
+        if not self._api_key:
+            return {
+                "answer": (
+                    "No LLM configured. Set OPENAI_API_KEY, or point "
+                    "OPENAI_BASE_URL at a local OpenAI-compatible server. "
+                    "Returning the retrieved source passages instead."
+                ),
+                "sources": sources,
+            }
+
         context = "\n\n".join(chunk["text"] for chunk in relevant_chunks)
         prompt = (
             "Based on the following context, answer the question.\n"
@@ -114,10 +128,7 @@ class RAGService:
         except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
             answer = f"Error generating answer: {exc}"
 
-        return {
-            "answer": answer,
-            "sources": [chunk["text"] for chunk in relevant_chunks],
-        }
+        return {"answer": answer, "sources": sources}
 
 
 # Aliases inject current module globals at call time so patches on

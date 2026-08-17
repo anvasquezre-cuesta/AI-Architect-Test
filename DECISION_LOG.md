@@ -98,6 +98,20 @@ the refactor is core work, not polish.
   and architecture tests all pass simultaneously via the D-9 hybrid pattern.
 - **Status:** `finding`.
 
+### F-6 — Live end-to-end run: retrieval threshold too high; no-LLM UX
+
+- **Observation:** Running the container end-to-end, `/api/extract` and `/api/ingest` worked
+  (names + boxes + `page_number`; fuzzy match e.g. "Robert Chenn"→"Robert Chen" score 0.96,
+  Jaro-Winkler 0.9833). But `/api/ask` returned "No relevant information found": querying Qdrant
+  directly showed the correct chunk scored **0.291** cosine, below the hardcoded `score_threshold=0.5`
+  inherited from the scaffold, so all context was filtered out.
+- **Action:** Make the retrieval threshold configurable (`RETRIEVAL_SCORE_THRESHOLD`, default 0.2)
+  instead of a magic 0.5; retrieval now returns the right sources. Also short-circuit the LLM call
+  when no key is configured, returning a clear message plus the retrieved passages rather than an
+  opaque `Illegal header value` error.
+- **Status:** `implemented`. (Only reachable by running the app — unit tests mock retrieval, so this
+  is exactly the class of defect the live verification was for.)
+
 ---
 
 ## Decisions
