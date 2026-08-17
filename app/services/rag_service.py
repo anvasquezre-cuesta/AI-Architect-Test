@@ -9,6 +9,7 @@ than letting it steer extraction (DECISION_LOG D-5).
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Protocol, runtime_checkable
 
@@ -17,6 +18,8 @@ import httpx
 from app import config
 from app.services.embedding_service import get_query_embedding
 from app.services.vector_service import search_similar
+
+logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = config.OPENAI_API_KEY
 
@@ -126,6 +129,9 @@ class RAGService:
             data = response.json()
             answer = data["choices"][0]["message"]["content"]
         except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
+            logger.warning(
+                "LLM call failed", extra={"model": self._model, "error": str(exc)}
+            )
             answer = f"Error generating answer: {exc}"
 
         return {"answer": answer, "sources": sources}

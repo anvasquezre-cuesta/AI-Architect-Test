@@ -50,6 +50,15 @@ def extract_names_from_pdf(
         extracted_name_strings = [nb["name"] for nb in name_boxes]
         matches = fuzzy_match_names(extracted_name_strings, query_names)
 
+        logger.info(
+            "extract complete",
+            extra={
+                "pdf": pdf_file.filename,
+                "n_query_names": len(query_names),
+                "n_extracted": len(name_boxes),
+                "n_matches": len(matches),
+            },
+        )
         return {
             "extracted_names": [
                 {
@@ -66,5 +75,10 @@ def extract_names_from_pdf(
             ],
             "fuzzy_matches": matches,
         }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("extract failed", extra={"pdf": pdf_file.filename})
+        raise HTTPException(status_code=500, detail="Failed to process the PDF.")
     finally:
         os.unlink(tmp.name)

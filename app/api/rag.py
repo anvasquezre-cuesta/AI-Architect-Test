@@ -39,7 +39,14 @@ def ingest_pdf(pdf_file: UploadFile = File(...)):
         chunks = chunk_text(text)
         store_document_chunks(chunks)
 
+        logger.info(
+            "ingest complete",
+            extra={"pdf": pdf_file.filename, "chunks_stored": len(chunks)},
+        )
         return {"status": "success", "chunks_stored": len(chunks)}
+    except Exception:
+        logger.exception("ingest failed", extra={"pdf": pdf_file.filename})
+        raise HTTPException(status_code=500, detail="Failed to ingest the PDF.")
     finally:
         os.unlink(tmp.name)
 
@@ -47,4 +54,12 @@ def ingest_pdf(pdf_file: UploadFile = File(...)):
 @router.post("/ask", response_model=RAGResponse)
 def ask_question(request: RAGRequest):
     """Answer a question using the RAG pipeline."""
-    return generate_answer(request.question)
+    result = generate_answer(request.question)
+    logger.info(
+        "ask complete",
+        extra={
+            "question_len": len(request.question),
+            "n_sources": len(result.get("sources", [])),
+        },
+    )
+    return result

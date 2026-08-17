@@ -24,6 +24,9 @@ RETRIEVAL_SCORE_THRESHOLD = float(os.getenv("RETRIEVAL_SCORE_THRESHOLD", "0.2"))
 # NER
 SPACY_MODEL = os.getenv("SPACY_MODEL", "en_core_web_sm")
 
+# Logging
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
 # RAG / LLM
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
