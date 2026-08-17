@@ -1,15 +1,45 @@
-from sentence_transformers import SentenceTransformer
+"""Embedding service (Sentence-Transformers / MiniLM by default).
+
+The model is injected from the composition root and loaded once (lazily). Callers
+patch the re-exported names in the consuming modules (vector_service.get_embeddings,
+rag_service.get_query_embedding), so those stay module-level aliases.
+"""
+
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
+
+from app.dependencies import get_embedding_model
 
 
-def get_embeddings(texts: list[str]) -> list[list[float]]:
-    """Convert texts to vector embeddings."""
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-    embeddings = model.encode(texts)
-    return embeddings.tolist()
+@runtime_checkable
+class EmbeddingService(Protocol):
+    """Interface for embedding backends so the model can be swapped."""
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        ...
+
+    def embed_query(self, query: str) -> list[float]:
+        ...
 
 
-def get_query_embedding(query: str) -> list[float]:
-    """Convert a single query to a vector embedding."""
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-    embedding = model.encode([query])
-    return embedding[0].tolist()
+class SentenceTransformerEmbeddingService:
+    """Sentence-Transformers embedder. The model is injected, not loaded here."""
+
+    def __init__(self, model) -> None:
+        self._model = model
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return self._model.encode(texts).tolist()
+
+    def embed_query(self, query: str) -> list[float]:
+        return self._model.encode([query])[0].tolist()
+
+
+# Aliases resolve the cached model lazily at call time (no load at import).
+get_embeddings = lambda texts: SentenceTransformerEmbeddingService(  # noqa: E731
+    get_embedding_model()
+).embed_texts(texts)
+get_query_embedding = lambda query: SentenceTransformerEmbeddingService(  # noqa: E731
+    get_embedding_model()
+).embed_query(query)

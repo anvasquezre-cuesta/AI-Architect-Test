@@ -1,64 +1,101 @@
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+"""Vector store service (Qdrant).
 
+Wraps Qdrant behind a ``VectorStore`` interface so the backend is swappable. The
+client and embedder are injected; construction of the real client happens in the
+composition root.
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Protocol, runtime_checkable
+
+from qdrant_client.models import Distance, PointStruct, VectorParams
+
+from app import config
+from app.dependencies import get_qdrant_client
 from app.services.embedding_service import get_embeddings
 
-
-client = QdrantClient(host="localhost", port=6333)
-
-COLLECTION_NAME = "pdf_documents"
-VECTOR_SIZE = 384
+COLLECTION_NAME = config.QDRANT_COLLECTION
+VECTOR_SIZE = config.EMBEDDING_DIM
 
 
-def init_collection():
-    """Create the vector collection if it doesn't exist."""
-    collections = client.get_collections().collections
-    existing = [c.name for c in collections]
+@runtime_checkable
+class VectorStore(Protocol):
+    """Interface for a vector store (Qdrant, Chroma, ...)."""
 
-    if COLLECTION_NAME not in existing:
-        client.create_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(
-                size=VECTOR_SIZE,
-                distance=Distance.COSINE,
-            ),
-        )
+    def init_collection(self) -> None:
+        ...
+
+    def store_document_chunks(self, chunks: list[str], metadata=None) -> None:
+        ...
+
+    def search_similar(self, query_embedding: list[float], top_k: int = 5) -> list[dict]:
+        ...
 
 
-def store_document_chunks(chunks: list[str], metadata: list[dict] = None):
-    """Store text chunks with their embeddings in the vector database."""
-    embeddings = get_embeddings(chunks)
+class QdrantVectorStore:
+    """Qdrant-backed vector store. Client and embedder are injected."""
 
-    points = []
-    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-        payload = {"text": chunk}
-        if metadata and i < len(metadata):
-            payload.update(metadata[i])
+    def __init__(
+        self,
+        client,
+        embedder,
+        collection_name: str = COLLECTION_NAME,
+        vector_size: int = VECTOR_SIZE,
+    ) -> None:
+        self._client = client
+        self._embed = embedder
+        self._collection = collection_name
+        self._vector_size = vector_size
 
-        points.append(
-            PointStruct(
-                id=i,
-                vector=embedding,
-                payload=payload,
+    def init_collection(self) -> None:
+        existing = [c.name for c in self._client.get_collections().collections]
+        if self._collection not in existing:
+            self._client.create_collection(
+                collection_name=self._collection,
+                vectors_config=VectorParams(
+                    size=self._vector_size, distance=Distance.COSINE
+                ),
             )
+
+    def store_document_chunks(self, chunks: list[str], metadata=None) -> None:
+        embeddings = self._embed(chunks)
+        points = []
+        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+            payload = {"text": chunk}
+            if metadata and i < len(metadata):
+                payload.update(metadata[i])
+            # UUID id, not a per-call index, so a second document does not
+            # overwrite the first (previous bug used id=i starting at 0).
+            points.append(
+                PointStruct(id=str(uuid.uuid4()), vector=embedding, payload=payload)
+            )
+        self._client.upsert(collection_name=self._collection, points=points)
+
+    def search_similar(
+        self, query_embedding: list[float], top_k: int = 5
+    ) -> list[dict]:
+        results = self._client.search(
+            collection_name=self._collection,
+            query_vector=query_embedding,
+            limit=top_k,
+            score_threshold=0.5,
         )
+        return [
+            {"text": hit.payload["text"], "score": hit.score} for hit in results
+        ]
 
-    client.upsert(collection_name=COLLECTION_NAME, points=points)
 
-
-def search_similar(query_embedding: list[float], top_k: int = 5) -> list[dict]:
-    """Search for similar text chunks."""
-    results = client.search(
-        collection_name=COLLECTION_NAME,
-        query_vector=query_embedding,
-        limit=top_k,
-        score_threshold=0.5,
-    )
-
-    return [
-        {
-            "text": hit.payload["text"],
-            "score": hit.score,
-        }
-        for hit in results
-    ]
+# Module-level patchable client + aliases that inject the current module globals
+# (`client`, `get_embeddings`) at call time so tests' patches take effect.
+client = get_qdrant_client()
+init_collection = lambda: QdrantVectorStore(  # noqa: E731
+    client, get_embeddings
+).init_collection()
+store_document_chunks = lambda chunks, metadata=None: QdrantVectorStore(  # noqa: E731
+    client, get_embeddings
+).store_document_chunks(chunks, metadata)
+search_similar = lambda query_embedding, top_k=5: QdrantVectorStore(  # noqa: E731
+    client, get_embeddings
+).search_similar(query_embedding, top_k)
