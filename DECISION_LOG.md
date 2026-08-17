@@ -73,6 +73,31 @@ the refactor is core work, not polish.
   be introduced at grading time, so injection defenses are still designed in (see D-5).
 - **Status:** `finding`.
 
+### F-2 — Red baseline captured
+
+- **Observation:** With the pinned deps installed (Python 3.12.7, Tesseract 5.5.2 already on the
+  system), `pytest -q` reports **30 failed, 19 passed**. No failure is a Qdrant connection error —
+  vector/integration tests mock the client, so no live Qdrant is needed for the unit loop.
+- **Breakdown:** architecture 8 · integration 6 · api 5 · ocr 3 · ner 3 · fuzzy 2 · bbox 1 ·
+  rag 1 · vector 1.
+- **Status:** `finding` (the "before" number; target is 49 passing).
+
+### F-4 — Low rasterization DPI degraded OCR accuracy
+
+- **Observation:** After the page-0 fix, `test_minutes_extracts_both_pages` still failed: both
+  pages *were* read, but Tesseract misread "Richard Hernandez" as "Pichard Hernandez". Root cause:
+  `extract_text` rasterized at PyMuPDF's ~72-DPI default while `get_word_bounding_boxes` used 150
+  DPI; at 72 DPI, glyphs like R are misread as P.
+- **Action:** Rasterize `extract_text` at the same OCR DPI (150). A genuine quality fix, not a
+  test-specific hack.
+- **Status:** `implemented`.
+
+### F-5 — Result: full suite green
+
+- **Observation:** `pytest -q` → **49 passed** (from 30 failed / 19 passed at baseline). Bug, API,
+  and architecture tests all pass simultaneously via the D-9 hybrid pattern.
+- **Status:** `finding`.
+
 ---
 
 ## Decisions
