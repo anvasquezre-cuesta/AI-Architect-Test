@@ -130,6 +130,20 @@ uvicorn app.main:app --reload
 
 Interactive docs (Swagger UI) are served at `http://localhost:8000/docs`.
 
+### Observability (optional)
+
+The app emits structured JSON logs to stdout (one object per line, with a per-request
+id and timings). To persist and query them, bring up the opt-in observability profile,
+which adds Grafana Loki (log store), Promtail (collector), and Grafana (viewer):
+
+```bash
+docker compose --profile observability up -d
+```
+
+Grafana is then at `http://localhost:3000` (anonymous access, Loki datasource
+pre-provisioned). Query the app logs with a LogQL expression like
+`{container=~".*app.*"}`. The default `docker compose up` stays lean (app + Qdrant only).
+
 Example:
 
 ```bash
