@@ -6,6 +6,8 @@ services:
       - "6334:6334"   # gRPC
     volumes:
       - qdrant_storage:/qdrant/storage
+    labels:
+      log_scrape: "true"   # only labeled containers are collected by Promtail
 
   app:
     build: .
@@ -18,6 +20,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-3.5-turbo}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+    labels:
+      log_scrape: "true"   # only labeled containers are collected by Promtail
     # The Qdrant client connects lazily on the first request, so start-order
     # ordering is sufficient; no readiness gate needed to boot the API.
     depends_on:
