@@ -141,11 +141,12 @@ sequenceDiagram
 ## d. Tradeoffs considered
 
 - **Accuracy vs speed (OCR):** rasterizing at 150 DPI instead of the ~72 DPI default fixed real
-  misreads (R→P) at a modest CPU cost. Higher DPI improves accuracy with diminishing returns and
+  misreads (R read as P) at a modest CPU cost. Higher DPI improves accuracy with diminishing returns and
   linear time growth.
 - **Accuracy vs safety (NER):** an LLM extractor would raise recall on noisy/international names
   but opens a prompt-injection surface and adds cost/latency/non-determinism. We chose deterministic
-  spaCy and confined the LLM to the answer step. (A documented LLM→validate→spaCy cascade is the
+  spaCy and confined the LLM to the answer step. (A documented cascade of LLM extraction, then
+  validation, then a spaCy fallback is the
   quality-first alternative.)
 - **Cost vs quality (embeddings/LLM):** MiniLM + a small open chat model are the cheap/fast, fully
   open baseline; both are one config change away from higher quality (bge/large embeddings, a larger
@@ -170,7 +171,7 @@ sequenceDiagram
 
 | Failure | Mitigation |
 |---------|------------|
-| Corrupt/encrypted/non-PDF upload | Type check → 400 (implemented); wrap OCR in try/except and fail the job cleanly, not the worker. |
+| Corrupt/encrypted/non-PDF upload | Type check returns 400 (implemented); wrap OCR in try/except and fail the job cleanly, not the worker. |
 | OCR misreads / empty text | Higher DPI (done); optional preprocessing (deskew/denoise); return partial results with a confidence signal. |
 | Qdrant unavailable | Retries with backoff + circuit breaker; health checks; queued ingests drain when it recovers. |
 | LLM error / rate limit / missing key | Timeout + error handling already wraps the call; retry with jitter; degrade to returning retrieved sources without a generated answer. |
@@ -183,8 +184,8 @@ sequenceDiagram
 Route by estimated query complexity to balance cost and quality:
 - **Classify** each question cheaply (heuristics like length, multi-hop or comparative
   keywords, and retrieved-context size, or a tiny classifier) into `simple | moderate | complex`.
-- **Map to a tier:** simple → small/cheap local model (e.g. an 8B via vLLM/Ollama); moderate →
-  gpt-3.5-turbo; complex/low-confidence retrieval → a frontier model.
+- **Map to a tier:** a simple query goes to a small, cheap local model (for example an 8B via
+  vLLM/Ollama); a moderate one to gpt-3.5-turbo; a complex or low-confidence retrieval to a frontier model.
 - **Implement** behind the existing `AnswerGenerator` interface as a `RoutingRAGService` that owns a
   registry of model clients and picks one per request; model tiers stay config-driven, so routing
   adds no coupling. Add a confidence-based **escalation**: if the cheap tier returns low

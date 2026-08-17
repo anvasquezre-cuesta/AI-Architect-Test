@@ -117,7 +117,7 @@ As part of your submission, fill in the tables below documenting every bug you f
 | 1 | `services/ocr_service.py` | `extract_text_from_pdf` iterated `range(1, len(doc))`, skipping page 0. | Iterate from page 0 (`range(len(doc))`). |
 | 2 | `services/ocr_service.py` | The PDF document was never closed (resource leak). | Wrap processing in `try/finally` with `doc.close()`. |
 | 3 | `services/ocr_service.py` | Word bounding boxes were left in 150-DPI OCR image space. | Rescale coordinates by `72/150` back to PDF point space. |
-| 4 | `services/ocr_service.py` | `extract_text` rasterized at the ~72-DPI default, so Tesseract misread glyphs (e.g. "Richard" → "Pichard"). | Rasterize at the OCR DPI (150), matching the bounding-box path. |
+| 4 | `services/ocr_service.py` | `extract_text` rasterized at the ~72-DPI default, so Tesseract misread glyphs (for example "Richard" read as "Pichard"). | Rasterize at the OCR DPI (150), matching the bounding-box path. |
 | 5 | `services/ner_service.py` | spaCy model loaded at module import (global side effect). | Load once in `app/dependencies.py` (composition root) and inject; expose a patchable module-level `nlp`. |
 | 6 | `services/ner_service.py` | Extraction returned both `PERSON` and `ORG` entities, polluting names with organizations. | Filter to `PERSON` only. |
 | 7 | `services/bbox_service.py` | Case-sensitive comparison (`"JOHN" != "John"`) failed to match OCR words to NER names. | Compare lowercased on both sides. |

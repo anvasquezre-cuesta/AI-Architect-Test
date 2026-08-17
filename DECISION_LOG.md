@@ -15,7 +15,7 @@
 
 ## Legend
 
-- **Status:** `decided` (agreed, not yet built) · `implemented` · `deferred` (planned, time-permitting) · `finding` (observation, no action yet).
+- **Status:** one of `decided` (agreed, not yet built), `implemented`, `deferred` (planned, time-permitting), or `finding` (observation, no action yet).
 - Entries are ordered by when the reasoning happened, not by when code landed.
 
 ---
@@ -59,9 +59,9 @@ the refactor is core work, not polish.
 
 ### Fixed stack (dictated by `requirements.txt` + tests)
 
-- PDF: **PyMuPDF** · OCR: **pytesseract/Tesseract** · NER: **spaCy `en_core_web_sm`** ·
-  Fuzzy: **thefuzz + python-Levenshtein** · Embeddings: **`all-MiniLM-L6-v2`** ·
-  Vector DB: **Qdrant** · RAG LLM: **OpenAI `gpt-3.5-turbo`** (tests mock the HTTP call).
+- PDF: **PyMuPDF**, OCR: **pytesseract/Tesseract**, NER: **spaCy `en_core_web_sm`**,
+  Fuzzy: **thefuzz + python-Levenshtein**, Embeddings: **`all-MiniLM-L6-v2`**,
+  Vector DB: **Qdrant**, RAG LLM: **OpenAI `gpt-3.5-turbo`** (tests mock the HTTP call).
 
 ### F-1: Prompt-injection scan (the reported "AI trap")
 
@@ -78,8 +78,8 @@ the refactor is core work, not polish.
 - **Observation:** With the pinned deps installed (Python 3.12.7, Tesseract 5.5.2 already on the
   system), `pytest -q` reports **30 failed, 19 passed**. No failure is a Qdrant connection error:
   vector/integration tests mock the client, so no live Qdrant is needed for the unit loop.
-- **Breakdown:** architecture 8 · integration 6 · api 5 · ocr 3 · ner 3 · fuzzy 2 · bbox 1 ·
-  rag 1 · vector 1.
+- **Breakdown:** architecture 8, integration 6, api 5, ocr 3, ner 3, fuzzy 2, bbox 1,
+  rag 1, vector 1.
 - **Status:** `finding` (the "before" number; target is 49 passing).
 
 ### F-4: Low rasterization DPI degraded OCR accuracy
@@ -94,14 +94,14 @@ the refactor is core work, not polish.
 
 ### F-5: Result: full suite green
 
-- **Observation:** `pytest -q` → **49 passed** (from 30 failed / 19 passed at baseline). Bug, API,
+- **Observation:** `pytest -q` now reports **49 passed** (from 30 failed / 19 passed at baseline). Bug, API,
   and architecture tests all pass simultaneously via the D-9 hybrid pattern.
 - **Status:** `finding`.
 
 ### F-6: Live end-to-end run: retrieval threshold too high; no-LLM UX
 
 - **Observation:** Running the container end-to-end, `/api/extract` and `/api/ingest` worked
-  (names + boxes + `page_number`; fuzzy match e.g. "Robert Chenn"→"Robert Chen" score 0.96,
+  (names + boxes + `page_number`; fuzzy match, for example "Robert Chenn" matched "Robert Chen" at score 0.96,
   Jaro-Winkler 0.9833). But `/api/ask` returned "No relevant information found": querying Qdrant
   directly showed the correct chunk scored **0.291** cosine, below the hardcoded `score_threshold=0.5`
   inherited from the scaffold, so all context was filtered out.
@@ -117,7 +117,7 @@ the refactor is core work, not polish.
 - **Observation:** Wired the RAG answer step to a local **Ollama** server running **Qwen2.5:3b**
   (open, free, no API key) via its OpenAI-compatible endpoint (zero code change, config only,
   `OPENAI_BASE_URL=http://host.docker.internal:11434/v1`). Full flow on the running container:
-  ask "Who is the CEO and who was promoted to VP of Engineering?" →
+  ask "Who is the CEO and who was promoted to VP of Engineering?" and got back:
   *"The CEO is Margaret Thompson. Robert Chen has been promoted to Vice President of Engineering."*
   The answer is correct and grounded in the 3 retrieved sources.
 - **Also:** added a root `/` redirect to `/docs` (the bare host previously returned a bare 404,
@@ -174,8 +174,8 @@ the refactor is core work, not polish.
   injection-immune, cheap, and reproducible, and is what the tests assume. The LLM is therefore
   kept out of extraction and confined to the RAG answer step, where retrieved text is delimited
   and treated as data, not instructions. As a documented, time-permitting alternative, design a
-  cascade: **LLM extraction → Pydantic/structured validation (tenacity/retries) → fall back to
-  spaCy** on validation failure or injection signals.
+  cascade: **LLM extraction, then Pydantic/structured validation (tenacity/retries), then a
+  spaCy fallback** on validation failure or injection signals.
 - **Action:** Fix spaCy service (PERSON-only, injected model); design the cascade for later.
 - **Status:** primary `decided`; cascade `deferred`.
 
@@ -190,7 +190,7 @@ the refactor is core work, not polish.
 
 ### D-7: Execution order (approved)
 1. Environment + red baseline (venv, deps, Tesseract, `pytest -v`).
-2. Fix bugs bottom-up (ocr → ner → bbox → fuzzy → embedding → vector → rag → schemas → api),
+2. Fix bugs bottom-up (ocr, ner, bbox, fuzzy, embedding, vector, rag, schemas, then api),
    test each layer to green.
 3. Refactor to classes + Protocol + DI (satisfies `test_architecture`).
 4. Documented improvements / bonus (Jaro-Winkler corroboration, LLM-NER cascade).
