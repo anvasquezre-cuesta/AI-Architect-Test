@@ -112,6 +112,18 @@ the refactor is core work, not polish.
 - **Status:** `implemented`. (Only reachable by running the app — unit tests mock retrieval, so this
   is exactly the class of defect the live verification was for.)
 
+### F-7 — Full RAG verified with a local open LLM (no OpenAI)
+
+- **Observation:** Wired the RAG answer step to a local **Ollama** server running **Qwen2.5:3b**
+  (open, free, no API key) via its OpenAI-compatible endpoint — zero code change, config only
+  (`OPENAI_BASE_URL=http://host.docker.internal:11434/v1`). Full flow on the running container:
+  ask "Who is the CEO and who was promoted to VP of Engineering?" →
+  *"The CEO is Margaret Thompson. Robert Chen has been promoted to Vice President of Engineering."*
+  — correct and grounded in the 3 retrieved sources.
+- **Also:** added a root `/` redirect to `/docs` (the bare host previously returned a bare 404,
+  which is correct FastAPI behavior but confusing).
+- **Status:** `finding`. Confirms the "OpenAI-compatible = portable to open models" design (D-1/DESIGN).
+
 ---
 
 ## Decisions
