@@ -2,7 +2,7 @@
 
 Primary metric: token edit-distance ratio (thefuzz), thresholded at 90% as required.
 Secondary metric: Jaro-Winkler (prefix-weighted, well suited to names) as a
-corroborating signal — reported alongside the primary score and used only to flag
+corroborating signal. It is reported alongside the primary score and used only to flag
 agreement, never to override the spec-mandated primary decision (DECISION_LOG D-2).
 """
 

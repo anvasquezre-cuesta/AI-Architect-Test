@@ -5,11 +5,11 @@
 > It exists to make the process auditable and to feed the Findings Report (README) and
 > `DESIGN.md`.
 >
-> **Method — reasoning precedes action.** Every decision below was reasoned and recorded
+> **Method (reasoning precedes action).** Every decision below was reasoned and recorded
 > *before* the corresponding code was written. Decision entries are committed ahead of their
 > implementation so the git history itself evidences "thought first, then acted." AI assistance
 > was used to accelerate implementation and research, **not** to originate the architectural
-> decisions — those are the author's, captured here in the "Reasoning" fields.
+> decisions: those are mine, captured here in the "Reasoning" fields.
 
 ---
 
@@ -63,7 +63,7 @@ the refactor is core work, not polish.
   Fuzzy: **thefuzz + python-Levenshtein** · Embeddings: **`all-MiniLM-L6-v2`** ·
   Vector DB: **Qdrant** · RAG LLM: **OpenAI `gpt-3.5-turbo`** (tests mock the HTTP call).
 
-### F-1 — Prompt-injection scan (the reported "AI trap")
+### F-1: Prompt-injection scan (the reported "AI trap")
 
 - **Observation:** All three `sample_pdfs/*.pdf` are image-only scans (no text layer); a scan
   of the committed PDFs and all source for hidden/white/injected text or embedded instructions
@@ -73,16 +73,16 @@ the refactor is core work, not polish.
   be introduced at grading time, so injection defenses are still designed in (see D-5).
 - **Status:** `finding`.
 
-### F-2 — Red baseline captured
+### F-2: Red baseline captured
 
 - **Observation:** With the pinned deps installed (Python 3.12.7, Tesseract 5.5.2 already on the
-  system), `pytest -q` reports **30 failed, 19 passed**. No failure is a Qdrant connection error —
+  system), `pytest -q` reports **30 failed, 19 passed**. No failure is a Qdrant connection error:
   vector/integration tests mock the client, so no live Qdrant is needed for the unit loop.
 - **Breakdown:** architecture 8 · integration 6 · api 5 · ocr 3 · ner 3 · fuzzy 2 · bbox 1 ·
   rag 1 · vector 1.
 - **Status:** `finding` (the "before" number; target is 49 passing).
 
-### F-4 — Low rasterization DPI degraded OCR accuracy
+### F-4: Low rasterization DPI degraded OCR accuracy
 
 - **Observation:** After the page-0 fix, `test_minutes_extracts_both_pages` still failed: both
   pages *were* read, but Tesseract misread "Richard Hernandez" as "Pichard Hernandez". Root cause:
@@ -92,13 +92,13 @@ the refactor is core work, not polish.
   test-specific hack.
 - **Status:** `implemented`.
 
-### F-5 — Result: full suite green
+### F-5: Result: full suite green
 
 - **Observation:** `pytest -q` → **49 passed** (from 30 failed / 19 passed at baseline). Bug, API,
   and architecture tests all pass simultaneously via the D-9 hybrid pattern.
 - **Status:** `finding`.
 
-### F-6 — Live end-to-end run: retrieval threshold too high; no-LLM UX
+### F-6: Live end-to-end run: retrieval threshold too high; no-LLM UX
 
 - **Observation:** Running the container end-to-end, `/api/extract` and `/api/ingest` worked
   (names + boxes + `page_number`; fuzzy match e.g. "Robert Chenn"→"Robert Chen" score 0.96,
@@ -109,17 +109,17 @@ the refactor is core work, not polish.
   instead of a magic 0.5; retrieval now returns the right sources. Also short-circuit the LLM call
   when no key is configured, returning a clear message plus the retrieved passages rather than an
   opaque `Illegal header value` error.
-- **Status:** `implemented`. (Only reachable by running the app — unit tests mock retrieval, so this
+- **Status:** `implemented`. (Only reachable by running the app, since unit tests mock retrieval, so this
   is exactly the class of defect the live verification was for.)
 
-### F-7 — Full RAG verified with a local open LLM (no OpenAI)
+### F-7: Full RAG verified with a local open LLM (no OpenAI)
 
 - **Observation:** Wired the RAG answer step to a local **Ollama** server running **Qwen2.5:3b**
-  (open, free, no API key) via its OpenAI-compatible endpoint — zero code change, config only
-  (`OPENAI_BASE_URL=http://host.docker.internal:11434/v1`). Full flow on the running container:
+  (open, free, no API key) via its OpenAI-compatible endpoint (zero code change, config only,
+  `OPENAI_BASE_URL=http://host.docker.internal:11434/v1`). Full flow on the running container:
   ask "Who is the CEO and who was promoted to VP of Engineering?" →
   *"The CEO is Margaret Thompson. Robert Chen has been promoted to Vice President of Engineering."*
-  — correct and grounded in the 3 retrieved sources.
+  The answer is correct and grounded in the 3 retrieved sources.
 - **Also:** added a root `/` redirect to `/docs` (the bare host previously returned a bare 404,
   which is correct FastAPI behavior but confusing).
 - **Status:** `finding`. Confirms the "OpenAI-compatible = portable to open models" design (D-1/DESIGN).
@@ -128,7 +128,7 @@ the refactor is core work, not polish.
 
 ## Decisions
 
-### D-1 — Respect the dictated stack; libraries are not a free choice
+### D-1: Respect the dictated stack; libraries are not a free choice
 - **Context:** The task reads like a greenfield build, but `requirements.txt` and the tests fix
   most library choices.
 - **Reasoning:** Deviating from the pinned stack would break tests and misread the assignment,
@@ -137,7 +137,7 @@ the refactor is core work, not polish.
 - **Action:** Keep the pinned stack; document the reasoning for each choice in `DESIGN.md`.
 - **Status:** `decided`.
 
-### D-2 — Fuzzy matching: keep edit-distance ratio at 90, add a corroborating metric
+### D-2: Fuzzy matching: keep edit-distance ratio at 90, add a corroborating metric
 - **Context:** Requirement mandates fuzzy matching at a 90% threshold. Considered replacing it
   with embedding cosine similarity.
 - **Reasoning:** Name matching is a *lexical/typographic* problem (OCR noise, spelling variants),
@@ -149,14 +149,14 @@ the refactor is core work, not polish.
   score.
 - **Status:** `decided`.
 
-### D-3 — Embedding checkpoint: MiniLM now, evaluate bge-small later
+### D-3: Embedding checkpoint: MiniLM now, evaluate bge-small later
 - **Context:** Scaffold uses `all-MiniLM-L6-v2`. No hard latency SLA is enforced by tests.
 - **Reasoning:** MiniLM is small and fast, keeping the test loop quick and validating the pipeline
   end-to-end. If time remains, compare against `bge-small-en-v1.5` for a quality/speed trade study.
 - **Action:** Keep MiniLM as default; note the comparison as a time-permitting experiment.
 - **Status:** `decided` (comparison `deferred`).
 
-### D-4 — Vector DB: Qdrant, for the service/explainability/scaling story
+### D-4: Vector DB: Qdrant, for the service/explainability/scaling story
 - **Context:** Scaffold uses Qdrant; author has prior Chroma experience.
 - **Reasoning:** The assessment rewards a production-shaped answer: Qdrant runs as its own
   container in docker-compose (which the task explicitly asks for), exposes scores + payload
@@ -166,7 +166,7 @@ the refactor is core work, not polish.
   trade-off in `DESIGN.md`.
 - **Status:** `decided`.
 
-### D-5 — NER: deterministic spaCy as primary, LLM cascade as documented alternative
+### D-5: NER: deterministic spaCy as primary, LLM cascade as documented alternative
 - **Context:** Task allows NER or LLM. Author's instinct: an LLM extracts higher-quality names
   from noisy OCR.
 - **Reasoning:** True on clean text, but an instruction-following LLM at the extraction step is
@@ -179,7 +179,7 @@ the refactor is core work, not polish.
 - **Action:** Fix spaCy service (PERSON-only, injected model); design the cascade for later.
 - **Status:** primary `decided`; cascade `deferred`.
 
-### D-6 — Architecture: refactor services to classes + Protocol/ABC + dependency injection
+### D-6: Architecture: refactor services to classes + Protocol/ABC + dependency injection
 - **Context:** `tests/test_architecture.py` requires ≥4 service classes, Protocol/ABC interfaces,
   DI, and forbids module-level or in-function model/client instantiation. All such tests fail now.
 - **Reasoning:** This is 20% of the grade and structurally central. It also resolves the tension
@@ -188,7 +188,7 @@ the refactor is core work, not polish.
 - **Action:** Introduce Protocol interfaces and service classes; wire dependencies via FastAPI DI.
 - **Status:** `decided`.
 
-### D-7 — Execution order (approved)
+### D-7: Execution order (approved)
 1. Environment + red baseline (venv, deps, Tesseract, `pytest -v`).
 2. Fix bugs bottom-up (ocr → ner → bbox → fuzzy → embedding → vector → rag → schemas → api),
    test each layer to green.
@@ -198,20 +198,20 @@ the refactor is core work, not polish.
 6. `DESIGN.md` (diagrams, justifications, scaling, failure modes, LLM routing).
 - **Status:** `decided`.
 
-### D-8 — Refactor-as-fix: touch each service once (supersedes the fix-then-refactor split in D-7)
+### D-8: Refactor-as-fix: touch each service once (supersedes the fix-then-refactor split in D-7)
 - **Context:** Three "bugs" (global spaCy load, per-call `SentenceTransformer` instantiation,
   global Qdrant client) are the *same* defects the architecture suite flags (no globals, load once
   via constructor/DI). Fixing them as free functions first and refactoring to classes afterward
   would rework the same code twice and produce a noisy history.
-- **Reasoning:** Rewrite each service exactly once — into a class with a Protocol/ABC interface and
-  constructor-injected dependencies — and fix its logic bug in the same pass. Pure-logic bugs with
+- **Reasoning:** Rewrite each service exactly once (into a class with a Protocol/ABC interface and
+  constructor-injected dependencies) and fix its logic bug in the same pass. Pure-logic bugs with
   no structural dependency (off-by-one, threshold, f-string, schema fields) are fixed in place.
   Each service then lands as one clean commit that turns its bug test *and* its architecture test
   green together. Better engineering, cleaner narrative, less rework.
 - **Action:** Proceed service-by-service bottom-up (OCR first); one commit per service.
 - **Status:** `decided`.
 
-### F-3 — Core tension: unit tests vs architecture tests pull opposite ways
+### F-3: Core tension: unit tests vs architecture tests pull opposite ways
 - **Observation:** Unit tests import module-level functions (`from app.services.ocr_service import
   extract_text_from_pdf`) and patch module globals (`patch("app.services.vector_service.client")`).
   The architecture suite (AST-based) forbids module-level functions, forbids `spacy.load(` /
@@ -220,28 +220,28 @@ the refactor is core work, not polish.
   architecture tests. **Both suites must pass simultaneously.**
 - **Status:** `finding` (this is the crux of the assessment).
 
-### D-9 — Hybrid pattern that satisfies both suites
+### D-9: Hybrid pattern that satisfies both suites
 - **Reasoning:** Resolve F-3 without weakening either contract.
   1. Each service defines a `Protocol` interface + a concrete class (satisfies the OOP/abstraction
      architecture tests).
   2. Heavy dependencies (spaCy pipeline, SentenceTransformer, QdrantClient) are **never constructed
      inside a service file**; they are built in `app/dependencies.py` (outside `app/services/`, the
      only dir the AST audit scans) and injected via constructor. This is why the "load once" fix
-     and the "no globals" rule are compatible — loading happens in the factory, not the service.
+     and the "no globals" rule are compatible: loading happens in the factory, not the service.
   3. Backward-compatible module-level names are exposed as **assignments** binding to a default
      instance's methods (`extract_text_from_pdf = _default.extract_text`) and, for vector, a module
-     `client` attribute — assignments are not `FunctionDef` and contain no forbidden constructor
+     `client` attribute. These assignments are not `FunctionDef` and contain no forbidden constructor
      literal, so the AST audit passes while the unit tests' imports and patches keep working.
 - **Action:** Implement OCR first as the reference; replicate across services; add `app/dependencies.py`.
 - **Status:** `decided`.
 
-### D-10 — Containerization: app image + Qdrant service via Compose
+### D-10: Containerization: app image + Qdrant service via Compose
 - **Context:** The task requires a Dockerfile and a docker-compose that includes the vector DB as a
   service. Tesseract is a system binary (not a pip package) and the ML models must be present.
 - **Reasoning:** Base on `python:3.12-slim`; install the `tesseract-ocr` system package; pip-install
   requirements; **bake the models into the image** (`spaCy en_core_web_sm` and the SBERT
   `all-MiniLM-L6-v2` checkpoint) at build time so the container starts offline with no runtime
-  download — consistent with the fully-open, reproducible goal. Compose runs two services: `app`
+  download, which is consistent with the fully-open, reproducible goal. Compose runs two services: `app`
   and `qdrant` (official `qdrant/qdrant` image) with a persistent volume; `QDRANT_HOST=qdrant` is
   injected via environment so the same image runs locally (`localhost`) or in Compose. `app` waits
   on a Qdrant healthcheck. `OPENAI_*` stay optional env vars (RAG answer step only).

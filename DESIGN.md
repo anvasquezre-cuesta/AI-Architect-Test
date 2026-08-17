@@ -1,4 +1,4 @@
-# DESIGN — PDF Name Extractor & RAG API
+# DESIGN: PDF Name Extractor & RAG API
 
 A FastAPI service that OCRs scanned PDFs, extracts person names with their bounding
 boxes, fuzzy-matches them against a supplied list, and answers questions over the
@@ -12,7 +12,7 @@ constructor dependency injection; heavy models are built once in a composition r
 flowchart LR
     Client([Client])
 
-    subgraph API["API — FastAPI"]
+    subgraph API["API: FastAPI"]
         direction TB
         Extract["/api/extract"]
         Ingest["/api/ingest"]
@@ -20,7 +20,7 @@ flowchart LR
         Health["/health"]
     end
 
-    subgraph SVC["Services — Protocol + concrete class"]
+    subgraph SVC["Services: Protocol + concrete class"]
         direction TB
         OCR["OCR<br/>TesseractOCRService"]
         BBox["BBox<br/>NameBoundingBoxService"]
@@ -66,7 +66,7 @@ flowchart LR
 
 ## b. Sequence diagrams
 
-**Endpoint 1 — PDF upload, name extraction, fuzzy matching**
+**Endpoint 1: PDF upload, name extraction, fuzzy matching**
 
 ```mermaid
 sequenceDiagram
@@ -92,7 +92,7 @@ sequenceDiagram
     A-->>C: JSON {extracted_names[bbox+page], fuzzy_matches}
 ```
 
-**Endpoint 2 — RAG question answering** (ingest primes the store; ask serves queries)
+**Endpoint 2: RAG question answering** (ingest primes the store; ask serves queries)
 
 ```mermaid
 sequenceDiagram
@@ -132,10 +132,10 @@ sequenceDiagram
 | Layer | Choice | Why |
 |-------|--------|-----|
 | OCR | **Tesseract** (pytesseract) + **PyMuPDF** raster | Mature, open-source, no per-page cost; PyMuPDF gives fast, high-DPI rasterization and page geometry so OCR boxes can be mapped back to PDF space. |
-| NER | **spaCy `en_core_web_sm`** (PERSON) | Deterministic, local, cheap, reproducible — and, unlike an instruction-following LLM, it **cannot be hijacked by injected text** hidden in a scanned document. Injection-safety at the extraction step outweighs the marginal recall gain of an LLM here. |
+| NER | **spaCy `en_core_web_sm`** (PERSON) | Deterministic, local, cheap, reproducible, and (unlike an instruction-following LLM) it **cannot be hijacked by injected text** hidden in a scanned document. Injection-safety at the extraction step outweighs the marginal recall gain of an LLM here. |
 | Fuzzy | **thefuzz ratio (>=90)** + **Jaro-Winkler** | Name matching is lexical/typographic (OCR noise, spelling variants), not semantic; edit distance maps cleanly to the mandated 90% threshold. Jaro-Winkler (prefix-weighted) corroborates and flags disagreement. |
 | Embeddings | **SBERT `all-MiniLM-L6-v2`** (384-d) | Small, fast, strong general-purpose quality; keeps the loop cheap and runs fully local. Swappable via config for `bge-small` when quality matters more than latency. |
-| Vector DB | **Qdrant** | Runs as its own container in Compose, exposes scores + payload filtering for **explainable** retrieval, and scales (sharding, gRPC) — the production-shaped answer the brief rewards. |
+| Vector DB | **Qdrant** | Runs as its own container in Compose, exposes scores + payload filtering for **explainable** retrieval, and scales (sharding, gRPC): the production-shaped answer the brief rewards. |
 | RAG LLM | **Open self-hosted model via an OpenAI-compatible API** (e.g. Llama/Mistral on vLLM or Ollama) | Keeps the stack fully open. "OpenAI-compatible" is a wire protocol (`/chat/completions`), not a vendor lock-in: open servers (vLLM, Ollama, TGI) expose the same interface, so the client code is identical. `base_url`/`model`/`key` are config, so a neutral hosted model (gpt-3.5-turbo, Gemini) can be swapped in for convenience without any code change. |
 
 ## d. Tradeoffs considered
@@ -181,8 +181,8 @@ sequenceDiagram
 ## g. LLM routing (if added)
 
 Route by estimated query complexity to balance cost and quality:
-- **Classify** each question cheaply — heuristics (length, multi-hop/comparative keywords,
-  retrieved-context size) or a tiny classifier — into `simple | moderate | complex`.
+- **Classify** each question cheaply (heuristics like length, multi-hop or comparative
+  keywords, and retrieved-context size, or a tiny classifier) into `simple | moderate | complex`.
 - **Map to a tier:** simple → small/cheap local model (e.g. an 8B via vLLM/Ollama); moderate →
   gpt-3.5-turbo; complex/low-confidence retrieval → a frontier model.
 - **Implement** behind the existing `AnswerGenerator` interface as a `RoutingRAGService` that owns a

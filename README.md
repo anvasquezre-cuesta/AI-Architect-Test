@@ -105,9 +105,9 @@ docker compose up --build
 ```
 
 The API is then available at `http://localhost:8000` and Qdrant at
-`http://localhost:6333`. To run without an LLM, leave `OPENAI_API_KEY` empty —
+`http://localhost:6333`. To run without an LLM, leave `OPENAI_API_KEY` empty:
 extraction and ingestion work; only `/api/ask` needs it. Point `OPENAI_BASE_URL`
-at any OpenAI-compatible server (vLLM, Ollama, …) to use a self-hosted open model.
+at any OpenAI-compatible server (vLLM, Ollama, and similar) to use a self-hosted open model.
 
 ### Locally (without Docker)
 

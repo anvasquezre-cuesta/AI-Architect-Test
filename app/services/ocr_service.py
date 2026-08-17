@@ -54,7 +54,7 @@ class TesseractOCRService:
             for page_num in range(len(doc)):
                 page = doc[page_num]
                 # Rasterize at OCR DPI (not the ~72 DPI default) so Tesseract has
-                # enough resolution — at the default, glyphs like R are misread as P.
+                # enough resolution. At the default, glyphs like R get misread as P.
                 pix = page.get_pixmap(dpi=self._dpi)
                 img = Image.open(io.BytesIO(pix.tobytes("png")))
                 parts.append(pytesseract.image_to_string(img))
