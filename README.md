@@ -87,3 +87,53 @@ instructions for running the containerized application and accessing the API end
 10. **Documentation and Submission:**
     - Document the code, and any external libraries or resources used.
     - Provide instructions for setting up and running the system, as well as any additional dependencies or requirements.
+
+---
+
+## Running the application
+
+### With Docker Compose (recommended)
+
+Builds the API image (Tesseract, spaCy, and the SBERT model are baked in) and starts
+it together with a Qdrant vector database.
+
+```bash
+# Optional: copy env template and set an LLM key for the RAG /ask endpoint.
+cp .env.example .env
+
+docker compose up --build
+```
+
+The API is then available at `http://localhost:8000` and Qdrant at
+`http://localhost:6333`. To run without an LLM, leave `OPENAI_API_KEY` empty —
+extraction and ingestion work; only `/api/ask` needs it. Point `OPENAI_BASE_URL`
+at any OpenAI-compatible server (vLLM, Ollama, …) to use a self-hosted open model.
+
+### Locally (without Docker)
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+docker run -p 6333:6333 qdrant/qdrant          # vector DB for the RAG endpoints
+uvicorn app.main:app --reload
+```
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Liveness probe. |
+| POST | `/api/extract` | Multipart: `pdf_file` (PDF) + `names` (JSON array of `{first_name, last_name}`). Returns extracted names, bounding boxes (with `page_number`), and fuzzy-match results. |
+| POST | `/api/ingest` | Multipart: `pdf_file` (PDF). OCRs, chunks, embeds, and stores the document in Qdrant. |
+| POST | `/api/ask` | JSON: `{ "question": "..." }`. Returns a RAG-generated `answer` and its `sources`. |
+
+Interactive docs (Swagger UI) are served at `http://localhost:8000/docs`.
+
+Example:
+
+```bash
+curl -F "pdf_file=@sample_pdfs/company_memo.pdf" \
+     -F 'names=[{"first_name":"John","last_name":"Smith"}]' \
+     http://localhost:8000/api/extract
+```

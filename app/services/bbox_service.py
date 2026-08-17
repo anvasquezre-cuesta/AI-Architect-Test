@@ -36,13 +36,17 @@ class NameBoundingBoxService:
         word_boxes = self._word_boxes(pdf_path)
 
         name_boxes: list[dict] = []
+        used: set[int] = set()  # consumed boxes, so a repeated name maps to the next occurrence
         for name in names:
             matched = []
             for part in name.split():
-                for box in word_boxes:
+                for idx, box in enumerate(word_boxes):
+                    if idx in used:
+                        continue
                     # Case-insensitive: OCR may yield "JOHN" while NER yields "John".
                     if box["word"].lower() == part.lower():
                         matched.append(box)
+                        used.add(idx)
                         break
             if not matched:
                 continue
