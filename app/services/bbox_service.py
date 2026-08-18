@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from app.services.ner_service import extract_names
 from app.services.ocr_service import get_word_bounding_boxes
@@ -24,7 +24,6 @@ MAX_GAP_FACTOR = 3.0        # max horizontal gap between adjacent words, in line
 MAX_HEIGHT_FACTOR = 2.0     # a real name box is about one line tall
 
 
-@runtime_checkable
 class BoundingBoxService(Protocol):
     """Interface for locating names on a page."""
 

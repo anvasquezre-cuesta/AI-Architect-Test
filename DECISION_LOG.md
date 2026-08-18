@@ -274,3 +274,20 @@ the refactor is core work, not polish.
   injected via environment so the same image runs locally (`localhost`) or in Compose. `app` waits
   on a Qdrant healthcheck. `OPENAI_*` stay optional env vars (RAG answer step only).
 - **Status:** `decided`.
+
+### D-11: Simplification pass (trim dead surface, justify the real extras)
+- **Context:** A deliberate overengineering review at the end. Candidates: `@runtime_checkable`
+  on the Protocols, unused `QdrantVectorStore` constructor params, the Loki/Grafana observability
+  stack, and the MLflow model-eval.
+- **Reasoning:** Cut what adds surface without value; keep and justify what is genuinely
+  production-essential. `@runtime_checkable` was dead (no `isinstance` ever uses it) and was
+  removed; the `Protocol` classes stay (they document the interface and satisfy the architecture
+  audit). `QdrantVectorStore` had `collection_name` / `vector_size` / `score_threshold` params that
+  no caller ever overrode (they only ever took config defaults); removed them and referenced the
+  module constants directly. The retrieval threshold stays tunable where it matters, via
+  `config.RETRIEVAL_SCORE_THRESHOLD` (already tuned 0.5 to 0.2). Observability and model-eval are
+  kept: both are opt-in (a Compose profile; an eval-only dependency), so they do not burden the core,
+  and both are essential in a real deployment. They are justified as such in `DESIGN.md` section h.
+- **Action:** Remove `@runtime_checkable` (7 files) and the unused params; keep observability and
+  MLflow with an explicit production justification.
+- **Status:** `implemented`. Suite stays 61/61.

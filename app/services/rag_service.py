@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 import httpx
 
@@ -26,7 +26,6 @@ OPENAI_API_KEY = config.OPENAI_API_KEY
 _NO_CONTEXT_MESSAGE = "No relevant information found."
 
 
-@runtime_checkable
 class AnswerGenerator(Protocol):
     """Interface for RAG answer generation."""
 

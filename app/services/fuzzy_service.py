@@ -8,7 +8,7 @@ agreement, never to override the spec-mandated primary decision (DECISION_LOG D-
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from Levenshtein import jaro_winkler
 from thefuzz import fuzz
@@ -17,7 +17,6 @@ from thefuzz import fuzz
 SIMILARITY_THRESHOLD = 90
 
 
-@runtime_checkable
 class NameMatcher(Protocol):
     """Interface for name matchers."""
 

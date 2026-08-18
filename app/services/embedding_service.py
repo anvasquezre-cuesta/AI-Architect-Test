@@ -7,12 +7,11 @@ rag_service.get_query_embedding), so those stay module-level aliases.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from app.dependencies import get_embedding_model
 
 
-@runtime_checkable
 class EmbeddingService(Protocol):
     """Interface for embedding backends so the model can be swapped."""
 

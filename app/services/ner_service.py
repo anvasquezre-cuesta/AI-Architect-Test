@@ -8,14 +8,13 @@ documented as an optional alternative, kept out of this trust-sensitive path.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from app.dependencies import get_spacy_nlp
 
 PERSON_LABEL = "PERSON"
 
 
-@runtime_checkable
 class NERService(Protocol):
     """Interface for name extractors so the backend (spaCy, HF, LLM) is swappable."""
 

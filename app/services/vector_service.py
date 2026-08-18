@@ -8,7 +8,7 @@ composition root.
 from __future__ import annotations
 
 import uuid
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
@@ -20,7 +20,6 @@ COLLECTION_NAME = config.QDRANT_COLLECTION
 VECTOR_SIZE = config.EMBEDDING_DIM
 
 
-@runtime_checkable
 class VectorStore(Protocol):
     """Interface for a vector store (Qdrant, Chroma, ...)."""
 
@@ -37,27 +36,17 @@ class VectorStore(Protocol):
 class QdrantVectorStore:
     """Qdrant-backed vector store. Client and embedder are injected."""
 
-    def __init__(
-        self,
-        client,
-        embedder,
-        collection_name: str = COLLECTION_NAME,
-        vector_size: int = VECTOR_SIZE,
-        score_threshold: float = config.RETRIEVAL_SCORE_THRESHOLD,
-    ) -> None:
+    def __init__(self, client, embedder) -> None:
         self._client = client
         self._embed = embedder
-        self._collection = collection_name
-        self._vector_size = vector_size
-        self._score_threshold = score_threshold
 
     def init_collection(self) -> None:
         existing = [c.name for c in self._client.get_collections().collections]
-        if self._collection not in existing:
+        if COLLECTION_NAME not in existing:
             self._client.create_collection(
-                collection_name=self._collection,
+                collection_name=COLLECTION_NAME,
                 vectors_config=VectorParams(
-                    size=self._vector_size, distance=Distance.COSINE
+                    size=VECTOR_SIZE, distance=Distance.COSINE
                 ),
             )
 
@@ -73,16 +62,16 @@ class QdrantVectorStore:
             points.append(
                 PointStruct(id=str(uuid.uuid4()), vector=embedding, payload=payload)
             )
-        self._client.upsert(collection_name=self._collection, points=points)
+        self._client.upsert(collection_name=COLLECTION_NAME, points=points)
 
     def search_similar(
         self, query_embedding: list[float], top_k: int = 5
     ) -> list[dict]:
         results = self._client.search(
-            collection_name=self._collection,
+            collection_name=COLLECTION_NAME,
             query_vector=query_embedding,
             limit=top_k,
-            score_threshold=self._score_threshold,
+            score_threshold=config.RETRIEVAL_SCORE_THRESHOLD,
         )
         return [
             {"text": hit.payload["text"], "score": hit.score} for hit in results

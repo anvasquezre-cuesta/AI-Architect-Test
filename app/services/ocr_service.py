@@ -14,7 +14,7 @@ Design notes:
 from __future__ import annotations
 
 import io
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 import fitz
 import pytesseract
@@ -25,7 +25,6 @@ OCR_DPI = 150
 PDF_DPI = 72
 
 
-@runtime_checkable
 class OCRService(Protocol):
     """Interface for OCR engines."""
 

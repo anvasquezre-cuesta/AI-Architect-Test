@@ -191,4 +191,19 @@ Route by estimated query complexity to balance cost and quality:
   adds no coupling. Add a confidence-based **escalation**: if the cheap tier returns low
   self-reported confidence or fails validation, retry once on the next tier.
 - **Observe:** log chosen tier, latency, token cost, and answer quality signals to tune thresholds.
-```
+
+## h. Production extras (beyond the assessment)
+
+Two pieces go past what the assessment strictly requires, but in a real deployment I consider
+them essential. Both are opt-in, so they never burden the core service:
+
+- **Observability.** The app writes one structured JSON log line per request (id, timing, counts)
+  to stdout, which is the 12-factor substance. An opt-in `--profile observability` Compose profile
+  ships those logs to Grafana Loki and views them in Grafana. You cannot operate a document
+  pipeline blind: per-request tracing, error rates, and latency are what let you debug and meet an
+  SLA. Kept behind a profile so the default `docker compose up` stays app plus Qdrant only.
+- **Model evaluation.** `eval/` measures RAG quality (hit-rate@k, MRR, answer accuracy) and compares
+  candidate open models, logging each run to local MLflow files. The model choice (qwen2.5:3b) came
+  from those numbers, not from taste. In production, every model or prompt change must be judged
+  against a measured baseline, and this is that baseline. MLflow is an eval-only dependency, not part
+  of the application image.
