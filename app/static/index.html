@@ -140,16 +140,28 @@
         if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
         const data = await res.json();
         const matchedNames = new Set(data.fuzzy_matches.map(m => m.extracted_name));
+        // Group by name: a name that appears more than once becomes one row with
+        // all of its bounding boxes, instead of a repeated row per occurrence.
+        const groups = new Map();
+        data.extracted_names.forEach(n => {
+          if (!groups.has(n.name)) groups.set(n.name, []);
+          groups.get(n.name).push(n.bounding_box);
+        });
         // Matched names first, so what the user searched for is at the top of the list.
-        const ordered = [...data.extracted_names].sort(
-          (a, b) => (matchedNames.has(b.name) ? 1 : 0) - (matchedNames.has(a.name) ? 1 : 0)
+        const names = [...groups.keys()].sort(
+          (a, b) => (matchedNames.has(b) ? 1 : 0) - (matchedNames.has(a) ? 1 : 0)
         );
         let html = `<table><tr><th>Extracted name</th><th>Page ${help('page')}</th><th>Box (x, y, w, h) ${help('box')}</th></tr>`;
-        ordered.forEach(n => {
-          const b = n.bounding_box;
-          const isM = matchedNames.has(n.name);
+        names.forEach(name => {
+          const boxes = groups.get(name);
+          const isM = matchedNames.has(name);
           const tag = isM ? ' <span class="badge ok">match</span>' : '';
-          html += `<tr${isM ? ' class="matched"' : ''}><td>${esc(n.name)}${tag}</td><td>${b.page_number}</td><td class="muted">${b.x.toFixed(0)}, ${b.y.toFixed(0)}, ${b.width.toFixed(0)}, ${b.height.toFixed(0)}</td></tr>`;
+          const count = boxes.length > 1 ? ` <span class="muted">(${boxes.length}×)</span>` : '';
+          const pages = boxes.map(b => b.page_number).join('<br>');
+          const boxCol = boxes
+            .map(b => `${b.x.toFixed(0)}, ${b.y.toFixed(0)}, ${b.width.toFixed(0)}, ${b.height.toFixed(0)}`)
+            .join('<br>');
+          html += `<tr${isM ? ' class="matched"' : ''}><td>${esc(name)}${tag}${count}</td><td>${pages}</td><td class="muted">${boxCol}</td></tr>`;
         });
         html += "</table>";
         if (data.fuzzy_matches.length) {
