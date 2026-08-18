@@ -37,6 +37,7 @@
     .sources pre { white-space:pre-wrap; font-size:.8rem; margin:.5rem 0 0; }
     .spin { color:var(--accent); font-size:.85rem; }
     a { color:var(--accent); }
+    .help { display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; margin-left:.3rem; border-radius:50%; border:1px solid var(--muted); color:var(--muted); font-size:.7rem; cursor:help; vertical-align:middle; }
   </style>
 </head>
 <body>
@@ -64,19 +65,21 @@
 
     <section class="card">
       <h2>2. Ask a question (RAG)</h2>
-      <label>Ingest a PDF into the vector store first</label>
-      <div class="actions">
-        <input type="file" id="ingestPdf" accept="application/pdf" style="flex:1" />
-        <button class="primary" type="button" onclick="runIngest()">Ingest</button>
-        <span id="ingestStatus" class="spin"></span>
-      </div>
-      <label style="margin-top:1rem">Question</label>
+      <label>Question <span class="help" title="Answered from the documents already stored in the vector database. You do not need to upload anything if documents were ingested before.">?</span></label>
       <div class="actions">
         <input type="text" id="question" placeholder="Who is the CEO?" style="flex:1" onkeydown="if(event.key==='Enter')runAsk()" />
         <button class="primary" type="button" onclick="runAsk()">Ask</button>
         <span id="askStatus" class="spin"></span>
       </div>
       <div id="askResult"></div>
+      <details style="margin-top:1.25rem">
+        <summary class="muted" style="cursor:pointer">Optional: add a document to the knowledge base <span class="help" title="Adds this PDF's text to the vector store so it can be used to answer questions. Only needed to add new documents; the store already keeps what was ingested before.">?</span></summary>
+        <div class="actions" style="margin-top:.6rem">
+          <input type="file" id="ingestPdf" accept="application/pdf" style="flex:1" />
+          <button class="ghost" type="button" onclick="runIngest()">Ingest</button>
+          <span id="ingestStatus" class="spin"></span>
+        </div>
+      </details>
     </section>
   </main>
 
@@ -102,6 +105,14 @@
     }
     function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c])); }
 
+    const HELP = {
+      page: "Zero-based page number where the name was found.",
+      box: "Bounding box in PDF points: x and y of the top-left corner, then width and height.",
+      score: "Similarity between the queried name and the extracted name (edit-distance ratio, 0-100%). A match needs at least 90%.",
+      corroborated: "Both similarity metrics agree: the primary edit-distance ratio and a second metric (Jaro-Winkler) each clear the 90% threshold, so the match is high-confidence.",
+    };
+    function help(k) { return `<span class="help" title="${HELP[k]}">?</span>`; }
+
     async function runExtract() {
       const file = document.getElementById("extractPdf").files[0];
       const status = document.getElementById("extractStatus");
@@ -116,14 +127,14 @@
         const res = await fetch("/api/extract", { method: "POST", body: fd });
         if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
         const data = await res.json();
-        let html = "<table><tr><th>Extracted name</th><th>Page</th><th>Box (x, y, w, h)</th></tr>";
+        let html = `<table><tr><th>Extracted name</th><th>Page ${help('page')}</th><th>Box (x, y, w, h) ${help('box')}</th></tr>`;
         data.extracted_names.forEach(n => {
           const b = n.bounding_box;
           html += `<tr><td>${esc(n.name)}</td><td>${b.page_number}</td><td class="muted">${b.x.toFixed(0)}, ${b.y.toFixed(0)}, ${b.width.toFixed(0)}, ${b.height.toFixed(0)}</td></tr>`;
         });
         html += "</table>";
         if (data.fuzzy_matches.length) {
-          html += '<table><tr><th>Query match</th><th>Extracted</th><th>Score</th><th>Corroborated</th></tr>';
+          html += `<table><tr><th>Query match</th><th>Extracted</th><th>Score ${help('score')}</th><th>Corroborated ${help('corroborated')}</th></tr>`;
           data.fuzzy_matches.forEach(m => {
             const ok = m.corroborated;
             html += `<tr><td>${esc(m.matched_name)}</td><td>${esc(m.extracted_name)}</td><td>${(m.score*100).toFixed(0)}%</td><td><span class="badge ${ok?'ok':'bad'}">${ok?'yes':'no'}</span></td></tr>`;
