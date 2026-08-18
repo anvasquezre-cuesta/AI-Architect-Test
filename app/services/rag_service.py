@@ -2,9 +2,9 @@
 
 Word-aware chunking (preserves the exact source text), retrieval over the vector
 store, and answer generation via an OpenAI-compatible chat endpoint. The retrieved
-context is inserted as *data* into a fixed prompt; the model is instructed to answer
-only from context, which also contains any injected text to the answer step rather
-than letting it steer extraction (DECISION_LOG D-5).
+context is inserted as *data* into a fixed prompt; the model answers only from that
+context. Keeping the LLM in the answer step means any injected text in a document can
+reach only here, never the deterministic extraction step (DECISION_LOG D-5).
 """
 
 from __future__ import annotations
