@@ -112,30 +112,30 @@ As part of your submission, fill in the tables below documenting every bug you f
 
 ### Bugs Found & Fixed
 
-| # | File | Bug Description | How You Fixed It |
-|---|------|-----------------|------------------|
-| 1 | `services/ocr_service.py` | `extract_text_from_pdf` iterated `range(1, len(doc))`, skipping page 0. | Iterate from page 0 (`range(len(doc))`). |
-| 2 | `services/ocr_service.py` | The PDF document was never closed (resource leak). | Wrap processing in `try/finally` with `doc.close()`. |
-| 3 | `services/ocr_service.py` | Word bounding boxes were left in 150-DPI OCR image space. | Rescale coordinates by `72/150` back to PDF point space. |
-| 4 | `services/ocr_service.py` | `extract_text` rasterized at the ~72-DPI default, so Tesseract misread glyphs (for example "Richard" read as "Pichard"). | Rasterize at the OCR DPI (150), matching the bounding-box path. |
-| 5 | `services/ner_service.py` | spaCy model loaded at module import (global side effect). | Load once in `app/dependencies.py` (composition root) and inject; expose a patchable module-level `nlp`. |
-| 6 | `services/ner_service.py` | Extraction returned both `PERSON` and `ORG` entities, polluting names with organizations. | Filter to `PERSON` only. |
-| 7 | `services/bbox_service.py` | Case-sensitive comparison (`"JOHN" != "John"`) failed to match OCR words to NER names. | Compare lowercased on both sides. |
-| 8 | `services/bbox_service.py` | Early `break` reused the first occurrence, so a repeated name collapsed onto the same boxes. | Track consumed box indices so a repeated name maps to the next occurrence. |
-| 9 | `services/fuzzy_service.py` | Threshold was `70`, but the requirement is a 90% similarity threshold. | Set `SIMILARITY_THRESHOLD = 90`. |
-| 10 | `services/fuzzy_service.py` | `fuzz.partial_ratio` inflated scores so short substrings ("Jo Sm") wrongly matched. | Use full-string `fuzz.ratio`. |
-| 11 | `services/embedding_service.py` | `SentenceTransformer` was re-instantiated on every call. | Load once in the composition root (`lru_cache`) and inject. |
-| 12 | `services/vector_service.py` | Point IDs restarted at `0` each call, so a second document overwrote the first. | Use UUID point IDs. |
-| 13 | `services/rag_service.py` | Prompt used `{{question}}` inside an f-string, rendering the literal `{question}`. | Interpolate the real `question` into the prompt. |
-| 14 | `services/rag_service.py` | Naive character slicing split words across chunks. | Word-aware chunking that preserves the exact source text on join. |
-| 15 | `services/rag_service.py` | The OpenAI HTTP call and JSON parsing had no error handling. | Add timeout, `raise_for_status`, and a graceful error/degrade path. |
-| 16 | `models/schemas.py` | `ExtractionResponse` lacked `fuzzy_matches`; computed matches were silently dropped. | Add `fuzzy_matches: list[FuzzyMatch]`. |
-| 17 | `models/schemas.py` | `BoundingBox` lacked `page_number`. | Add `page_number: int`, populated from the OCR page. |
-| 18 | `models/schemas.py` | `RAGResponse` lacked `sources`; retrieved chunks were dropped. | Add `sources: list[str]`. |
-| 19 | `api/extract.py` | No upload validation: a non-PDF was processed instead of rejected. | Validate content type / suffix and raise `400`; also guard `names` JSON parsing. |
-| 20 | `main.py` | No `GET /health` endpoint. | Add a `/health` liveness route returning `200`. |
+| # | File | Bug Description | How You Fixed It | What it caused |
+|---|------|-----------------|------------------|----------------|
+| 1 | `services/ocr_service.py` | `extract_text_from_pdf` iterated `range(1, len(doc))`, skipping page 0. | Iterate from page 0 (`range(len(doc))`). | The first page was never read; single-page PDFs returned empty text. |
+| 2 | `services/ocr_service.py` | The PDF document was never closed (resource leak). | Wrap processing in `try/finally` with `doc.close()`. | Open file handles and memory leaked on every request, degrading a long-running server. |
+| 3 | `services/ocr_service.py` | Word bounding boxes were left in 150-DPI OCR image space. | Rescale coordinates by `72/150` back to PDF point space. | Every box was ~2x too large and mispositioned, so coordinates did not line up with the PDF. |
+| 4 | `services/ocr_service.py` | `extract_text` rasterized at the ~72-DPI default, so Tesseract misread glyphs (for example "Richard" read as "Pichard"). | Rasterize at the OCR DPI (150), matching the bounding-box path. | Names were misread, so they failed NER and fuzzy matching (real names were missed). |
+| 5 | `services/ner_service.py` | spaCy model loaded at module import (global side effect). | Load once in `app/dependencies.py` (composition root) and inject; expose a patchable module-level `nlp`. | Importing the module loaded spaCy eagerly (slow, untestable) and violated the architecture rules. |
+| 6 | `services/ner_service.py` | Extraction returned both `PERSON` and `ORG` entities, polluting names with organizations. | Filter to `PERSON` only. | Company names (e.g. "Acme Corp") were returned as if they were people. |
+| 7 | `services/bbox_service.py` | Case-sensitive comparison (`"JOHN" != "John"`) failed to match OCR words to NER names. | Compare lowercased on both sides. | Names the OCR wrote in a different case got no bounding box at all. |
+| 8 | `services/bbox_service.py` | Early `break` reused the first occurrence, so a repeated name collapsed onto the same boxes. | Track consumed box indices so a repeated name maps to the next occurrence. | A name appearing twice pointed both entries at the same location instead of its two real positions. |
+| 9 | `services/fuzzy_service.py` | Threshold was `70`, but the requirement is a 90% similarity threshold. | Set `SIMILARITY_THRESHOLD = 90`. | Weak, incorrect matches passed as valid, below the required confidence bar. |
+| 10 | `services/fuzzy_service.py` | `fuzz.partial_ratio` inflated scores so short substrings ("Jo Sm") wrongly matched. | Use full-string `fuzz.ratio`. | Partial or unrelated fragments matched full names, producing false positives. |
+| 11 | `services/embedding_service.py` | `SentenceTransformer` was re-instantiated on every call. | Load once in the composition root (`lru_cache`) and inject. | The embedding model reloaded on every request: very slow and memory-churning. |
+| 12 | `services/vector_service.py` | Point IDs restarted at `0` each call, so a second document overwrote the first. | Use UUID point IDs. | Ingesting a second PDF silently erased the first document's chunks from the store. |
+| 13 | `services/rag_service.py` | Prompt used `{{question}}` inside an f-string, rendering the literal `{question}`. | Interpolate the real `question` into the prompt. | The LLM never saw the actual question, so answers ignored what was asked. |
+| 14 | `services/rag_service.py` | Naive character slicing split words across chunks. | Word-aware chunking that preserves the exact source text on join. | Words were cut mid-token, degrading embedding quality and retrieval. |
+| 15 | `services/rag_service.py` | The OpenAI HTTP call and JSON parsing had no error handling. | Add timeout, `raise_for_status`, and a graceful error/degrade path. | Any LLM or network hiccup crashed the request with a raw 500 and stack trace. |
+| 16 | `models/schemas.py` | `ExtractionResponse` lacked `fuzzy_matches`; computed matches were silently dropped. | Add `fuzzy_matches: list[FuzzyMatch]`. | The API computed fuzzy matches but the response model stripped them, so clients never got them. |
+| 17 | `models/schemas.py` | `BoundingBox` lacked `page_number`. | Add `page_number: int`, populated from the OCR page. | Clients could not tell which page a name was found on. |
+| 18 | `models/schemas.py` | `RAGResponse` lacked `sources`; retrieved chunks were dropped. | Add `sources: list[str]`. | RAG answers came back with no supporting passages, so they were unverifiable. |
+| 19 | `api/extract.py` | No upload validation: a non-PDF was processed instead of rejected. | Validate content type / suffix and raise `400`; also guard `names` JSON parsing. | Uploading a `.txt` (or garbage) was processed anyway, risking confusing errors instead of a clean rejection. |
+| 20 | `main.py` | No `GET /health` endpoint. | Add a `/health` liveness route returning `200`. | Load balancers and orchestrators had no liveness probe to check the service. |
 
-Result: `pytest` goes from **30 failed / 19 passed** at baseline to **49 passed**.
+Result: fixing these bugs takes `pytest` from **30 failed / 19 passed** at baseline to **49 passed**. The additional tests written later (bounding-box quality, RAG retrieval quality, and edge cases) bring the suite to **61 passing**.
 
 ### Architecture & Design Improvements
 
