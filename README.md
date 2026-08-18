@@ -130,6 +130,21 @@ uvicorn app.main:app --reload
 
 Interactive docs (Swagger UI) are served at `http://localhost:8000/docs`.
 
+### RAG quality evaluation
+
+RAG is measured, not assumed. A small labeled set (`eval/rag_eval_set.json`, 12 questions
+over the sample PDFs) drives a harness that scores retrieval (hit-rate@k, mean reciprocal
+rank) and, when an LLM is configured, answer correctness (do the known facts appear):
+
+```bash
+# Needs a live Qdrant; answers need a local Ollama (or any OpenAI-compatible LLM).
+python -m eval.rag_eval            # retrieval + answers
+python -m eval.rag_eval --no-llm   # retrieval metrics only
+```
+
+`tests/test_rag_quality.py` turns the retrieval half into an automated gate (it asserts
+hit-rate and MRR stay above a floor, and skips itself when Qdrant is not reachable).
+
 ### Observability (optional)
 
 The app emits structured JSON logs to stdout (one object per line, with a per-request
