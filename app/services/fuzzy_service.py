@@ -38,7 +38,9 @@ class FuzzyNameMatcher:
     ) -> list[dict]:
         matches: list[dict] = []
         for query in query_names:
-            query_full = f"{query['first_name']} {query['last_name']}"
+            # strip() keeps matching clean when a caller passes an empty last name
+            # (e.g. a full name in one field), avoiding a trailing-space penalty.
+            query_full = f"{query['first_name']} {query['last_name']}".strip()
 
             best_match = None
             best_score = 0
