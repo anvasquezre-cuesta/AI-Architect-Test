@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse
 
 from app.api.extract import router as extract_router
 from app.api.rag import router as rag_router
 from app.logging_config import configure_logging
+
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 configure_logging()
 logger = logging.getLogger("app.access")
@@ -59,8 +62,8 @@ async def access_log(request: Request, call_next):
 
 @app.get("/", include_in_schema=False)
 def root():
-    """Redirect the bare host to the interactive API docs."""
-    return RedirectResponse(url="/docs")
+    """Serve the minimal single-page UI (calls the /api endpoints via fetch)."""
+    return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
 
 
 @app.get("/health", tags=["health"])

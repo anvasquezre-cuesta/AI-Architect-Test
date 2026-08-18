@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDF Name Extractor & RAG</title>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --fg:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --ok:#34d399; --bad:#f87171; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); line-height:1.5; }
+    header { padding:1.5rem; border-bottom:1px solid var(--line); }
+    header h1 { margin:0; font-size:1.25rem; }
+    header p { margin:.25rem 0 0; color:var(--muted); font-size:.9rem; }
+    main { max-width:900px; margin:0 auto; padding:1.5rem; display:grid; gap:1.5rem; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1.25rem; }
+    .card h2 { margin:0 0 1rem; font-size:1rem; }
+    label { display:block; font-size:.85rem; color:var(--muted); margin-bottom:.35rem; }
+    input, button { font:inherit; }
+    input[type=text], input[type=file] { width:100%; padding:.5rem .6rem; background:#0b1220; border:1px solid var(--line); border-radius:6px; color:var(--fg); }
+    .pair { display:flex; gap:.5rem; margin-bottom:.5rem; }
+    .pair input { flex:1; }
+    .pair button { background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:0 .6rem; cursor:pointer; }
+    .actions { display:flex; gap:.5rem; align-items:center; margin-top:.75rem; flex-wrap:wrap; }
+    button.primary { background:var(--accent); color:#08131f; border:none; padding:.55rem 1rem; border-radius:6px; font-weight:600; cursor:pointer; }
+    button.ghost { background:transparent; border:1px dashed var(--line); color:var(--muted); padding:.5rem .8rem; border-radius:6px; cursor:pointer; }
+    table { width:100%; border-collapse:collapse; margin-top:1rem; font-size:.85rem; }
+    th, td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-weight:500; }
+    .badge { padding:.1rem .45rem; border-radius:99px; font-size:.75rem; }
+    .badge.ok { background:rgba(52,211,153,.15); color:var(--ok); }
+    .badge.bad { background:rgba(248,113,113,.15); color:var(--bad); }
+    .muted { color:var(--muted); font-size:.85rem; }
+    .answer { margin-top:1rem; padding:.9rem; background:#0b1220; border:1px solid var(--line); border-radius:6px; }
+    .sources { margin-top:.75rem; }
+    .sources details { border:1px solid var(--line); border-radius:6px; padding:.4rem .6rem; margin-bottom:.4rem; }
+    .sources summary { cursor:pointer; color:var(--muted); font-size:.8rem; }
+    .sources pre { white-space:pre-wrap; font-size:.8rem; margin:.5rem 0 0; }
+    .spin { color:var(--accent); font-size:.85rem; }
+    a { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PDF Name Extractor &amp; RAG</h1>
+    <p>Upload a scanned PDF to extract names and match them, or ingest it and ask a question. API docs at <a href="/docs">/docs</a>.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>1. Extract names &amp; fuzzy match</h2>
+      <label>Scanned PDF</label>
+      <input type="file" id="extractPdf" accept="application/pdf" />
+      <label style="margin-top:1rem">Names to match (first and last)</label>
+      <div id="pairs">
+        <div class="pair"><input type="text" placeholder="First name" /><input type="text" placeholder="Last name" /><button type="button" onclick="removePair(this)">&times;</button></div>
+      </div>
+      <div class="actions">
+        <button class="ghost" type="button" onclick="addPair()">+ Add name</button>
+        <button class="primary" type="button" onclick="runExtract()">Extract</button>
+        <span id="extractStatus" class="spin"></span>
+      </div>
+      <div id="extractResult"></div>
+    </section>
+
+    <section class="card">
+      <h2>2. Ask a question (RAG)</h2>
+      <label>Ingest a PDF into the vector store first</label>
+      <div class="actions">
+        <input type="file" id="ingestPdf" accept="application/pdf" style="flex:1" />
+        <button class="primary" type="button" onclick="runIngest()">Ingest</button>
+        <span id="ingestStatus" class="spin"></span>
+      </div>
+      <label style="margin-top:1rem">Question</label>
+      <div class="actions">
+        <input type="text" id="question" placeholder="Who is the CEO?" style="flex:1" onkeydown="if(event.key==='Enter')runAsk()" />
+        <button class="primary" type="button" onclick="runAsk()">Ask</button>
+        <span id="askStatus" class="spin"></span>
+      </div>
+      <div id="askResult"></div>
+    </section>
+  </main>
+
+  <script>
+    function addPair(first="", last="") {
+      const div = document.createElement("div");
+      div.className = "pair";
+      div.innerHTML = `<input type="text" placeholder="First name" value="${first}"><input type="text" placeholder="Last name" value="${last}"><button type="button" onclick="removePair(this)">&times;</button>`;
+      document.getElementById("pairs").appendChild(div);
+    }
+    function removePair(btn) {
+      const pairs = document.getElementById("pairs");
+      if (pairs.children.length > 1) btn.parentElement.remove();
+    }
+    function collectNames() {
+      const out = [];
+      document.querySelectorAll("#pairs .pair").forEach(p => {
+        const [f, l] = p.querySelectorAll("input");
+        if (f.value.trim() || l.value.trim())
+          out.push({ first_name: f.value.trim(), last_name: l.value.trim() });
+      });
+      return out;
+    }
+    function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c])); }
+
+    async function runExtract() {
+      const file = document.getElementById("extractPdf").files[0];
+      const status = document.getElementById("extractStatus");
+      const result = document.getElementById("extractResult");
+      if (!file) { result.innerHTML = '<p class="muted">Choose a PDF first.</p>'; return; }
+      const fd = new FormData();
+      fd.append("pdf_file", file);
+      fd.append("names", JSON.stringify(collectNames()));
+      status.textContent = "Processing...";
+      result.innerHTML = "";
+      try {
+        const res = await fetch("/api/extract", { method: "POST", body: fd });
+        if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+        const data = await res.json();
+        let html = "<table><tr><th>Extracted name</th><th>Page</th><th>Box (x, y, w, h)</th></tr>";
+        data.extracted_names.forEach(n => {
+          const b = n.bounding_box;
+          html += `<tr><td>${esc(n.name)}</td><td>${b.page_number}</td><td class="muted">${b.x.toFixed(0)}, ${b.y.toFixed(0)}, ${b.width.toFixed(0)}, ${b.height.toFixed(0)}</td></tr>`;
+        });
+        html += "</table>";
+        if (data.fuzzy_matches.length) {
+          html += '<table><tr><th>Query match</th><th>Extracted</th><th>Score</th><th>Corroborated</th></tr>';
+          data.fuzzy_matches.forEach(m => {
+            const ok = m.corroborated;
+            html += `<tr><td>${esc(m.matched_name)}</td><td>${esc(m.extracted_name)}</td><td>${(m.score*100).toFixed(0)}%</td><td><span class="badge ${ok?'ok':'bad'}">${ok?'yes':'no'}</span></td></tr>`;
+          });
+          html += "</table>";
+        } else {
+          html += '<p class="muted">No fuzzy matches above the 90% threshold.</p>';
+        }
+        result.innerHTML = html;
+      } catch (e) {
+        result.innerHTML = `<p class="muted">Error: ${esc(e.message)}</p>`;
+      } finally { status.textContent = ""; }
+    }
+
+    async function runIngest() {
+      const file = document.getElementById("ingestPdf").files[0];
+      const status = document.getElementById("ingestStatus");
+      if (!file) { status.textContent = "Choose a PDF."; return; }
+      const fd = new FormData();
+      fd.append("pdf_file", file);
+      status.textContent = "Ingesting...";
+      try {
+        const res = await fetch("/api/ingest", { method: "POST", body: fd });
+        if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+        const data = await res.json();
+        status.textContent = `Stored ${data.chunks_stored} chunks.`;
+      } catch (e) { status.textContent = "Error: " + e.message; }
+    }
+
+    async function runAsk() {
+      const q = document.getElementById("question").value.trim();
+      const status = document.getElementById("askStatus");
+      const result = document.getElementById("askResult");
+      if (!q) { result.innerHTML = '<p class="muted">Type a question.</p>'; return; }
+      status.textContent = "Thinking...";
+      result.innerHTML = "";
+      try {
+        const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+        if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+        const data = await res.json();
+        let html = `<div class="answer">${esc(data.answer)}</div>`;
+        if (data.sources && data.sources.length) {
+          html += '<div class="sources">';
+          data.sources.forEach((s, i) => {
+            html += `<details><summary>Source ${i+1}</summary><pre>${esc(s)}</pre></details>`;
+          });
+          html += "</div>";
+        }
+        result.innerHTML = html;
+      } catch (e) {
+        result.innerHTML = `<p class="muted">Error: ${esc(e.message)}</p>`;
+      } finally { status.textContent = ""; }
+    }
+  </script>
+</body>
+</html>
