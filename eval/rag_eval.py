@@ -22,6 +22,7 @@ import argparse
 import glob
 import json
 import os
+import time
 
 from app import config
 from app.services import vector_service
@@ -74,9 +75,11 @@ def evaluate(eval_set: dict, rag: RAGService | None) -> dict:
                 break
         reciprocal_rank = 1.0 / rank if rank else 0.0
 
-        answer, answer_correct = None, None
+        answer, answer_correct, latency_s = None, None, None
         if rag is not None:
+            start = time.perf_counter()
             answer = rag.generate_answer(question)["answer"]
+            latency_s = time.perf_counter() - start
             norm_answer = _normalize(answer)
             answer_correct = all(
                 _normalize(kw) in norm_answer for kw in item["expected_answer"]
@@ -89,12 +92,14 @@ def evaluate(eval_set: dict, rag: RAGService | None) -> dict:
                 "rank": rank,
                 "reciprocal_rank": reciprocal_rank,
                 "answer_correct": answer_correct,
+                "latency_s": latency_s,
                 "answer": answer,
             }
         )
 
     n = len(rows)
     answered = [r for r in rows if r["answer_correct"] is not None]
+    latencies = [r["latency_s"] for r in answered]
     summary = {
         "n_questions": n,
         "top_k": top_k,
@@ -104,6 +109,9 @@ def evaluate(eval_set: dict, rag: RAGService | None) -> dict:
             round(sum(r["answer_correct"] for r in answered) / len(answered), 3)
             if answered
             else None
+        ),
+        "mean_latency_s": (
+            round(sum(latencies) / len(latencies), 2) if latencies else None
         ),
     }
     return {"summary": summary, "rows": rows}

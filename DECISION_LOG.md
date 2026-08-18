@@ -124,6 +124,18 @@ the refactor is core work, not polish.
   which is correct FastAPI behavior but confusing).
 - **Status:** `finding`. Confirms the "OpenAI-compatible = portable to open models" design (D-1/DESIGN).
 
+### F-8: Model choice confirmed with data (not taste)
+
+- **Observation:** Built a RAG quality harness (12 labeled questions over the sample PDFs) and
+  compared three local open models on the metrics that actually differ between them (retrieval is
+  identical, so it is not a selection signal): answer accuracy and mean latency. Results, logged to
+  MLflow (file-based, no server): qwen2.5:3b accuracy 1.0 / 1.1s, gemma2:2b 0.917 / 1.82s,
+  phi3.5 0.833 / 3.76s.
+- **Decision:** Keep **qwen2.5:3b** (best on both metrics), confirming the earlier D-5/F-7 choice
+  with data. Losing models removed to free disk; they can be re-pulled from the eval command.
+- **Status:** `implemented`. MLflow chosen in file-based mode (no container) to keep traceability
+  without infra bloat.
+
 ---
 
 ## Decisions

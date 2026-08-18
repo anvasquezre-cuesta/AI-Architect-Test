@@ -1,0 +1,3 @@
+# Evaluation-only dependencies. Kept separate from the app's requirements.txt so the
+# application image stays lean; these are needed only to run the eval/ harnesses.
+mlflow==2.16.2
