@@ -7,7 +7,8 @@ import logging
 import os
 import tempfile
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+import fitz
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 
 from app.models.schemas import ExtractionResponse
 from app.services.bbox_service import find_name_bounding_boxes
@@ -80,5 +81,55 @@ def extract_names_from_pdf(
     except Exception:
         logger.exception("extract failed", extra={"pdf": pdf_file.filename})
         raise HTTPException(status_code=500, detail="Failed to process the PDF.")
+    finally:
+        os.unlink(tmp.name)
+
+
+@router.post("/crop")
+def crop_bounding_box(
+    pdf_file: UploadFile = File(...),
+    page: int = Form(...),
+    x: float = Form(...),
+    y: float = Form(...),
+    width: float = Form(...),
+    height: float = Form(...),
+):
+    """Return a PNG crop of the PDF region for one bounding box.
+
+    Renders that page area with a little surrounding context and the box outlined,
+    so the user can visually verify what was extracted at those coordinates.
+    """
+    if not _is_pdf(pdf_file):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    try:
+        tmp.write(pdf_file.file.read())
+        tmp.close()
+
+        doc = fitz.open(tmp.name)
+        try:
+            if page < 0 or page >= len(doc):
+                raise HTTPException(status_code=400, detail="Page out of range.")
+            pdf_page = doc[page]
+            box = fitz.Rect(x, y, x + width, y + height)
+            pdf_page.draw_rect(box, color=(0.22, 0.74, 0.98), width=1.5)
+            pad = 24  # context around the box, in PDF points
+            clip = fitz.Rect(
+                max(0, x - pad),
+                max(0, y - pad),
+                min(pdf_page.rect.width, x + width + pad),
+                min(pdf_page.rect.height, y + height + pad),
+            )
+            png = pdf_page.get_pixmap(clip=clip, dpi=150).tobytes("png")
+        finally:
+            doc.close()
+
+        return Response(content=png, media_type="image/png")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("crop failed", extra={"pdf": pdf_file.filename})
+        raise HTTPException(status_code=500, detail="Failed to render the crop.")
     finally:
         os.unlink(tmp.name)

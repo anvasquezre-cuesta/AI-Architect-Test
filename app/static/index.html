@@ -43,6 +43,11 @@
     .help:hover::after { content:attr(data-tip); position:absolute; left:50%; bottom:150%; transform:translateX(-50%); width:250px; background:#0b1220; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:.6rem .7rem; font-size:.78rem; line-height:1.35; text-align:left; white-space:normal; z-index:20; box-shadow:0 6px 20px rgba(0,0,0,.5); }
     .help:hover::before { content:""; position:absolute; left:50%; bottom:150%; transform:translate(-50%,50%) rotate(45deg); width:8px; height:8px; background:#0b1220; border-right:1px solid var(--line); border-bottom:1px solid var(--line); z-index:21; }
     tr.matched td { background:rgba(56,189,248,.08); }
+    .boxlink { cursor:pointer; text-decoration:underline dotted; text-underline-offset:2px; }
+    .boxlink:hover { color:var(--accent); }
+    #cropPreview:not(:empty) { margin-top:1rem; padding:.75rem; background:#0b1220; border:1px solid var(--line); border-radius:8px; }
+    #cropPreview img { display:block; max-width:100%; border:1px solid var(--line); border-radius:6px; margin-top:.5rem; }
+    .croplabel { font-size:.85rem; }
   </style>
 </head>
 <body>
@@ -66,6 +71,7 @@
         <span id="extractStatus" class="spin"></span>
       </div>
       <div id="extractResult"></div>
+      <div id="cropPreview"></div>
     </section>
 
     <section class="card">
@@ -159,7 +165,7 @@
           const count = boxes.length > 1 ? ` <span class="muted">(${boxes.length}×)</span>` : '';
           const pages = boxes.map(b => b.page_number).join('<br>');
           const boxCol = boxes
-            .map(b => `${b.x.toFixed(0)}, ${b.y.toFixed(0)}, ${b.width.toFixed(0)}, ${b.height.toFixed(0)}`)
+            .map(b => `<span class="boxlink" data-page="${b.page_number}" data-x="${b.x}" data-y="${b.y}" data-w="${b.width}" data-h="${b.height}" data-name="${esc(name)}">${b.x.toFixed(0)}, ${b.y.toFixed(0)}, ${b.width.toFixed(0)}, ${b.height.toFixed(0)}</span>`)
             .join('<br>');
           html += `<tr${isM ? ' class="matched"' : ''}><td>${esc(name)}${tag}${count}</td><td>${pages}</td><td class="muted">${boxCol}</td></tr>`;
         });
@@ -175,9 +181,34 @@
           html += '<p class="muted">No fuzzy matches above the 90% threshold.</p>';
         }
         result.innerHTML = html;
+        document.getElementById("cropPreview").innerHTML = "";
+        result.querySelectorAll(".boxlink").forEach(el => {
+          el.title = "Click to preview this region in the document";
+          el.onclick = () => showCrop(el.dataset);
+        });
       } catch (e) {
         result.innerHTML = `<p class="muted">Error: ${esc(e.message)}</p>`;
       } finally { status.textContent = ""; }
+    }
+
+    async function showCrop(ds) {
+      const file = document.getElementById("extractPdf").files[0];
+      const preview = document.getElementById("cropPreview");
+      if (!file) return;
+      const fd = new FormData();
+      fd.append("pdf_file", file);
+      fd.append("page", ds.page);
+      fd.append("x", ds.x); fd.append("y", ds.y);
+      fd.append("width", ds.w); fd.append("height", ds.h);
+      preview.innerHTML = '<span class="muted">Loading crop...</span>';
+      try {
+        const res = await fetch("/api/crop", { method: "POST", body: fd });
+        if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+        const url = URL.createObjectURL(await res.blob());
+        preview.innerHTML = `<div class="croplabel">${esc(ds.name)} <span class="muted">(page ${ds.page})</span></div><img src="${url}" alt="document region for ${esc(ds.name)}">`;
+      } catch (e) {
+        preview.innerHTML = `<span class="muted">Error: ${esc(e.message)}</span>`;
+      }
     }
 
     async function runIngest() {
