@@ -136,6 +136,22 @@ the refactor is core work, not polish.
 - **Status:** `implemented`. MLflow chosen in file-based mode (no container) to keep traceability
   without infra bloat.
 
+### F-9: RAG prompt over-refused; generalized prompt + low temperature
+
+- **Observation:** "Who is Olivia Chambers?" returned "I don't have enough information" even though
+  the retrieved chunk clearly said "Dr. Olivia Chambers, Director of Research". Isolated against the
+  model directly: qwen2.5:3b over-refuses whenever the prompt carries an explicit "say you don't
+  know" clause, especially on "who is X?" phrasing where it expects a biography and a title feels
+  insufficient.
+- **Iteration:** removing the refusal clause fixed it (the model abstains on its own when context is
+  irrelevant, and out-of-domain questions are already short-circuited at the retrieval threshold). A
+  first fix over-corrected ("answer in one sentence, include role/title") and over-fitted to person
+  questions; generalized to "be specific and complete: include role, title, date, number, or name
+  when present." Temperature set to 0.2 (low but not rigid; 0 produced terse, degenerate answers).
+- **Verified:** person/date/number/list questions all answer completely; out-of-domain abstains;
+  eval answer accuracy stays 1.0.
+- **Status:** `implemented`.
+
 ---
 
 ## Decisions

@@ -103,12 +103,16 @@ class RAGService:
             }
 
         context = "\n\n".join(chunk["text"] for chunk in relevant_chunks)
+        # No explicit "say you don't know" clause: with small models it over-triggers and
+        # refuses even when the answer is present. Naming a role/title as valid fixes
+        # "who is X?" questions, and the model still abstains on its own when the context
+        # is unrelated (verified against qwen2.5:3b).
         prompt = (
-            "Based on the following context, answer the question.\n"
-            'If the answer is not in the context, say "I don\'t have enough '
-            'information."\n\n'
+            "Answer the question using only the context below. Be specific and "
+            "complete: when the context provides details such as a role, title, "
+            "date, number, or name, include them in the answer.\n\n"
             f"Context:\n{context}\n\n"
-            f"Question:\n{question}\n\n"
+            f"Question: {question}\n\n"
             "Answer:"
         )
 
@@ -122,6 +126,8 @@ class RAGService:
                 json={
                     "model": self._model,
                     "messages": [{"role": "user", "content": prompt}],
+                    # Low but non-zero: focused and grounded, not fully rigid.
+                    "temperature": 0.2,
                 },
                 timeout=30.0,
             )
