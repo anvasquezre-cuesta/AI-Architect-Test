@@ -144,7 +144,7 @@ sequenceDiagram
   misreads (R read as P) at a modest CPU cost. Higher DPI improves accuracy with diminishing returns and
   linear time growth.
 - **Accuracy vs safety (NER):** an LLM extractor would raise recall on noisy/international names
-  but opens a prompt-injection surface and adds cost/latency/non-determinism. We chose deterministic
+  but opens a prompt-injection surface and adds cost/latency/non-determinism. I chose deterministic
   spaCy and confined the LLM to the answer step. (A documented cascade of LLM extraction, then
   validation, then a spaCy fallback is the
   quality-first alternative.)

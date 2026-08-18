@@ -20,7 +20,7 @@ import fitz
 import pytesseract
 from PIL import Image
 
-# Rasterization DPI for OCR, and the PDF coordinate-space DPI we map boxes back to.
+# Rasterization DPI for OCR, and the PDF coordinate-space DPI boxes are mapped back to.
 OCR_DPI = 150
 PDF_DPI = 72
 
