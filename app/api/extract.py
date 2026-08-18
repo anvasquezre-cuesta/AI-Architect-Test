@@ -114,12 +114,14 @@ def crop_bounding_box(
             pdf_page = doc[page]
             box = fitz.Rect(x, y, x + width, y + height)
             pdf_page.draw_rect(box, color=(0.22, 0.74, 0.98), width=1.5)
-            pad = 24  # context around the box, in PDF points
+            # Full page width so no word is cut off, focused vertically on the line
+            # the name sits on (with a little context above and below).
+            pad_v = 18  # vertical context, in PDF points
             clip = fitz.Rect(
-                max(0, x - pad),
-                max(0, y - pad),
-                min(pdf_page.rect.width, x + width + pad),
-                min(pdf_page.rect.height, y + height + pad),
+                0,
+                max(0, y - pad_v),
+                pdf_page.rect.width,
+                min(pdf_page.rect.height, y + height + pad_v),
             )
             png = pdf_page.get_pixmap(clip=clip, dpi=150).tobytes("png")
         finally:
