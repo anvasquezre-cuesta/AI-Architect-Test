@@ -87,3 +87,84 @@ instructions for running the containerized application and accessing the API end
 10. **Documentation and Submission:**
     - Document the code, and any external libraries or resources used.
     - Provide instructions for setting up and running the system, as well as any additional dependencies or requirements.
+
+---
+
+## Running the application
+
+### With Docker Compose (recommended)
+
+Builds the API image (Tesseract, spaCy, and the SBERT model are baked in) and starts
+it together with a Qdrant vector database.
+
+```bash
+# Optional: copy env template and set an LLM key for the RAG /ask endpoint.
+cp .env.example .env
+
+docker compose up --build
+```
+
+The API is then available at `http://localhost:8000` and Qdrant at
+`http://localhost:6333`. Opening `http://localhost:8000/` serves a minimal web UI
+(a single static page served by FastAPI, no extra dependency) for uploading a PDF,
+matching names, and asking questions. To run without an LLM, leave `OPENAI_API_KEY` empty:
+extraction and ingestion work; only `/api/ask` needs it. Point `OPENAI_BASE_URL`
+at any OpenAI-compatible server (vLLM, Ollama, and similar) to use a self-hosted open model.
+
+### Locally (without Docker)
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+docker run -p 6333:6333 qdrant/qdrant          # vector DB for the RAG endpoints
+uvicorn app.main:app --reload
+```
+
+### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Liveness probe. |
+| POST | `/api/extract` | Multipart: `pdf_file` (PDF) + `names` (JSON array of `{first_name, last_name}`). Returns extracted names, bounding boxes (with `page_number`), and fuzzy-match results. |
+| POST | `/api/ingest` | Multipart: `pdf_file` (PDF). OCRs, chunks, embeds, and stores the document in Qdrant. |
+| POST | `/api/ask` | JSON: `{ "question": "..." }`. Returns a RAG-generated `answer` and its `sources`. |
+
+Interactive docs (Swagger UI) are served at `http://localhost:8000/docs`.
+
+### RAG quality evaluation
+
+RAG is measured, not assumed. A small labeled set (`eval/rag_eval_set.json`, 12 questions
+over the sample PDFs) drives a harness that scores retrieval (hit-rate@k, mean reciprocal
+rank) and, when an LLM is configured, answer correctness (do the known facts appear):
+
+```bash
+# Needs a live Qdrant; answers need a local Ollama (or any OpenAI-compatible LLM).
+python -m eval.rag_eval            # retrieval + answers
+python -m eval.rag_eval --no-llm   # retrieval metrics only
+```
+
+`tests/test_rag_quality.py` turns the retrieval half into an automated gate (it asserts
+hit-rate and MRR stay above a floor, and skips itself when Qdrant is not reachable).
+
+### Observability (optional)
+
+The app emits structured JSON logs to stdout (one object per line, with a per-request
+id and timings). To persist and query them, bring up the opt-in observability profile,
+which adds Grafana Loki (log store), Promtail (collector), and Grafana (viewer):
+
+```bash
+docker compose --profile observability up -d
+```
+
+Grafana is then at `http://localhost:3000` (anonymous access, Loki datasource
+pre-provisioned). Query the app logs with a LogQL expression like
+`{container=~".*app.*"}`. The default `docker compose up` stays lean (app + Qdrant only).
+
+Example:
+
+```bash
+curl -F "pdf_file=@sample_pdfs/company_memo.pdf" \
+     -F 'names=[{"first_name":"John","last_name":"Smith"}]' \
+     http://localhost:8000/api/extract
+```

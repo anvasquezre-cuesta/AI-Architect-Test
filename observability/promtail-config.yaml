@@ -1,0 +1,27 @@
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Discover running containers through the Docker socket and ship their stdout
+  # (our structured JSON logs) to Loki, labeled by container name and stream.
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Only collect containers explicitly opted in with the `log_scrape=true`
+      # label. Everything else on the Docker host is dropped.
+      - source_labels: ['__meta_docker_container_label_log_scrape']
+        regex: 'true'
+        action: keep
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'stream'
