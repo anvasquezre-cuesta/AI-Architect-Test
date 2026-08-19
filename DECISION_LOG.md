@@ -291,3 +291,19 @@ the refactor is core work, not polish.
 - **Action:** Remove `@runtime_checkable` (7 files) and the unused params; keep observability and
   MLflow with an explicit production justification.
 - **Status:** `implemented`. Suite stays 61/61.
+
+### D-12: Thin the controllers and remove endpoint redundancy (reviewer feedback)
+- **Context:** Feedback that the endpoints held service logic (not only HTTP) and had redundancy,
+  and that the folder architecture is neither hexagonal nor strictly layered. The ask was awareness
+  and critique, not a full re-architecture.
+- **Reasoning:** Fix the clearest offenders without breaking the test contract. The `/crop` endpoint
+  literally contained the PDF-rendering implementation; move it to a `pdf_render_service` so the
+  controller becomes thin (validate, delegate, respond), with the service raising a domain error the
+  controller maps to HTTP. Remove the duplicated `_is_pdf` and temp-file handling via shared helpers
+  (`require_pdf`, `saved_pdf`). Leave the `/extract` and `/ingest` orchestration inline: the unit
+  tests patch the controller's own symbols, so extracting it into a use-case module would defeat
+  those patches. Do not attempt a hexagonal rewrite (over-scoped, and it fights the alias pattern the
+  tests require). Document the tradeoffs honestly in `DESIGN.md` section i.
+- **Action:** Add `app/api/_helpers.py` and `app/services/pdf_render_service.py`; thin the
+  controllers; add the architecture self-critique section.
+- **Status:** `implemented`. Suite stays 61/61; all four endpoints smoke-tested.

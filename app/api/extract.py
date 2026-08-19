@@ -1,28 +1,22 @@
-"""PDF name-extraction endpoint."""
+"""PDF name-extraction and region-crop endpoints."""
 
 from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 
-import fitz
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 
+from app.api._helpers import require_pdf, saved_pdf
 from app.models.schemas import ExtractionResponse
 from app.services.bbox_service import find_name_bounding_boxes
 from app.services.fuzzy_service import fuzzy_match_names
 from app.services.ocr_service import extract_text_from_pdf
+from app.services.pdf_render_service import render_region
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _is_pdf(upload: UploadFile) -> bool:
-    filename = (upload.filename or "").lower()
-    return upload.content_type == "application/pdf" or filename.endswith(".pdf")
 
 
 @router.post("/extract", response_model=ExtractionResponse)
@@ -31,9 +25,7 @@ def extract_names_from_pdf(
     names: str = Form(...),
 ):
     """Extract person names + bounding boxes from a PDF and fuzzy-match them."""
-    if not _is_pdf(pdf_file):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-
+    require_pdf(pdf_file)
     try:
         query_names = json.loads(names)
     except json.JSONDecodeError:
@@ -41,15 +33,13 @@ def extract_names_from_pdf(
             status_code=400, detail="`names` must be a valid JSON array."
         )
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     try:
-        tmp.write(pdf_file.file.read())
-        tmp.close()
-
-        text = extract_text_from_pdf(tmp.name)
-        name_boxes = find_name_bounding_boxes(tmp.name, text)
-        extracted_name_strings = [nb["name"] for nb in name_boxes]
-        matches = fuzzy_match_names(extracted_name_strings, query_names)
+        with saved_pdf(pdf_file) as path:
+            text = extract_text_from_pdf(path)
+            name_boxes = find_name_bounding_boxes(path, text)
+            matches = fuzzy_match_names(
+                [nb["name"] for nb in name_boxes], query_names
+            )
 
         logger.info(
             "extract complete",
@@ -81,8 +71,6 @@ def extract_names_from_pdf(
     except Exception:
         logger.exception("extract failed", extra={"pdf": pdf_file.filename})
         raise HTTPException(status_code=500, detail="Failed to process the PDF.")
-    finally:
-        os.unlink(tmp.name)
 
 
 @router.post("/crop")
@@ -94,44 +82,15 @@ def crop_bounding_box(
     width: float = Form(...),
     height: float = Form(...),
 ):
-    """Return a PNG crop of the PDF region for one bounding box.
-
-    Renders that page area with a little surrounding context and the box outlined,
-    so the user can visually verify what was extracted at those coordinates.
-    """
-    if not _is_pdf(pdf_file):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    """Return a PNG crop of the PDF region for one bounding box (box outlined)."""
+    require_pdf(pdf_file)
     try:
-        tmp.write(pdf_file.file.read())
-        tmp.close()
-
-        doc = fitz.open(tmp.name)
-        try:
-            if page < 0 or page >= len(doc):
-                raise HTTPException(status_code=400, detail="Page out of range.")
-            pdf_page = doc[page]
-            box = fitz.Rect(x, y, x + width, y + height)
-            pdf_page.draw_rect(box, color=(0.22, 0.74, 0.98), width=1.5)
-            # Full page width so no word is cut off, focused vertically on the line
-            # the name sits on (with a little context above and below).
-            pad_v = 18  # vertical context, in PDF points
-            clip = fitz.Rect(
-                0,
-                max(0, y - pad_v),
-                pdf_page.rect.width,
-                min(pdf_page.rect.height, y + height + pad_v),
-            )
-            png = pdf_page.get_pixmap(clip=clip, dpi=150).tobytes("png")
-        finally:
-            doc.close()
-
-        return Response(content=png, media_type="image/png")
-    except HTTPException:
-        raise
+        with saved_pdf(pdf_file) as path:
+            png = render_region(path, page, x, y, width, height)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Page out of range.")
     except Exception:
         logger.exception("crop failed", extra={"pdf": pdf_file.filename})
         raise HTTPException(status_code=500, detail="Failed to render the crop.")
-    finally:
-        os.unlink(tmp.name)
+
+    return Response(content=png, media_type="image/png")

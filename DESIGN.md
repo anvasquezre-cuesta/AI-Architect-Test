@@ -207,3 +207,26 @@ them essential. Both are opt-in, so they never burden the core service:
   from those numbers, not from taste. In production, every model or prompt change must be judged
   against a measured baseline, and this is that baseline. MLflow is an eval-only dependency, not part
   of the application image.
+
+## i. Architecture notes and known tradeoffs
+
+Being explicit about what this structure is and is not:
+
+- **Folder layout.** The code is grouped by technical role (`api/`, `services/`, `models/`,
+  `dependencies.py`, `config.py`). That is a light layering, not a strict layered architecture and
+  not hexagonal (ports and adapters). It is pragmatic for the size of the problem.
+- **Thin vs orchestrating controllers.** The `/crop` endpoint's PDF rendering was moved into a
+  service (`pdf_render_service`), so that controller is now thin: validate, delegate, respond. The
+  `/extract` and `/ingest` controllers still orchestrate a short sequence of service calls inline.
+  That is a deliberate tradeoff: the unit tests patch the controller's own symbols
+  (`app.api.extract.extract_text_from_pdf`, ...), so moving that orchestration into a separate
+  use-case module would defeat those patches. Shared helpers (`require_pdf`, `saved_pdf`) removed the
+  duplicated PDF check and temp-file handling.
+- **Protocols are documentation, not the load-bearing seams.** Each service defines a `Protocol`,
+  but callers reach the services through module-level aliases rather than injected ports. This is a
+  consequence of the alias pattern needed to satisfy the architecture tests (classes, no globals) and
+  the unit tests (module-level, patchable functions) at the same time.
+- **How I would evolve it.** Introduce an application/use-case layer for the pipelines, and wire
+  services through FastAPI `Depends` against the Protocols, moving toward true ports and adapters. I
+  did not do that here to avoid a rewrite larger than the assessment warrants and to keep the
+  existing test contract intact.
