@@ -39,10 +39,8 @@ first and the implementation second.
   layer to green.
 - Mechanical scaffolding: the Dockerfile, the docker-compose file, the config and
   environment plumbing, and drafting documentation prose from my decisions.
-- Surfacing options and tradeoffs for me to choose from (the selection and the judgment
-  stayed with me).
 - Running the application end to end and reporting results, which is how I found and
-  fixed two runtime-only defects (the retrieval threshold and the empty-key handling).
+  fixed different runtime-only defects (the retrieval threshold and the empty-key handling).
 
 ## Verification
 
