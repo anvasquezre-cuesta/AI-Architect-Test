@@ -304,7 +304,7 @@ the refactor is core work, not polish.
   (`require_pdf`, `saved_pdf`). Leave the `/extract` and `/ingest` orchestration inline: the unit
   tests patch the controller's own symbols, so extracting it into a use-case module would defeat
   those patches. Do not attempt a hexagonal rewrite (over-scoped, and it fights the alias pattern the
-  tests require). Document the tradeoffs honestly in `DESIGN.md` section i.
+  tests require). Document the tradeoffs in `DESIGN.md` section i.
 - **Action:** Add `app/api/_helpers.py` and `app/services/pdf_render_service.py`; thin the
   controllers; add the architecture self-critique section.
 - **Status:** `implemented`. Suite stays 61/61; all four endpoints smoke-tested.
