@@ -116,7 +116,7 @@ sequenceDiagram
     C->>K: POST {question}
     K->>E: embed_query(question)
     E-->>K: query vector
-    K->>Q: search(top_k=3, cosine, score>=0.5)
+    K->>Q: search(top_k=3, cosine, score>=0.2)
     Q-->>K: chunks + scores
     alt no chunks
         K-->>C: "No relevant information found"
@@ -132,10 +132,10 @@ sequenceDiagram
 | Layer | Choice | Why |
 |-------|--------|-----|
 | OCR | **Tesseract** (pytesseract) + **PyMuPDF** raster | Mature, open-source, no per-page cost; PyMuPDF gives fast, high-DPI rasterization and page geometry so OCR boxes can be mapped back to PDF space. |
-| NER | **spaCy `en_core_web_sm`** (PERSON) | Deterministic, local, cheap, reproducible, and (unlike an instruction-following LLM) it **cannot be hijacked by injected text** hidden in a scanned document. Injection-safety at the extraction step outweighs the marginal recall gain of an LLM here. |
+| NER | **spaCy `en_core_web_sm`** (PERSON) | Deterministic and local, and (unlike an instruction-following LLM) it **cannot be hijacked by injected text** hidden in a scanned document. Injection-safety at the extraction step outweighs the marginal recall gain of an LLM here. |
 | Fuzzy | **thefuzz ratio (>=90)** + **Jaro-Winkler** | Name matching is lexical/typographic (OCR noise, spelling variants), not semantic; edit distance maps cleanly to the mandated 90% threshold. Jaro-Winkler (prefix-weighted) corroborates and flags disagreement. |
-| Embeddings | **SBERT `all-MiniLM-L6-v2`** (384-d) | Small, fast, strong general-purpose quality; keeps the loop cheap and runs fully local. Swappable via config for `bge-small` when quality matters more than latency. |
-| Vector DB | **Qdrant** | Runs as its own container in Compose, exposes scores + payload filtering for **explainable** retrieval, and scales (sharding, gRPC): the production-shaped answer the brief rewards. |
+| Embeddings | **SBERT `all-MiniLM-L6-v2`** (384-d) | Small and fast, with good general-purpose quality, and runs fully local. Swappable via config for `bge-small` when quality matters more than latency. |
+| Vector DB | **Qdrant** | Runs as its own container in Compose, exposes match scores and payload filtering so retrieval is inspectable, and scales (sharding, gRPC) toward the 1000+ PDFs/hour target. |
 | RAG LLM | **Open self-hosted model via an OpenAI-compatible API** (e.g. Llama/Mistral on vLLM or Ollama) | Keeps the stack fully open. "OpenAI-compatible" is a wire protocol (`/chat/completions`), not a vendor lock-in: open servers (vLLM, Ollama, TGI) expose the same interface, so the client code is identical. `base_url`/`model`/`key` are config, so a neutral hosted model (gpt-3.5-turbo, Gemini) can be swapped in for convenience without any code change. |
 
 ## d. Tradeoffs considered

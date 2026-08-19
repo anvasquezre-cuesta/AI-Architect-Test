@@ -46,7 +46,7 @@ first and the implementation second.
 
 ## Verification
 
-I verified everything myself: the full test suite passes (49 of 49), and I exercised
+I verified everything myself: the full test suite passes (61 of 61), and I exercised
 every API endpoint against the running container, including real RAG answer generation
 with a local open model. I reviewed, corrected, and accepted the AI's output rather than
 taking it on trust.

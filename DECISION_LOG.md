@@ -186,9 +186,9 @@ the refactor is core work, not polish.
 
 ### D-4: Vector DB: Qdrant, for the service/explainability/scaling story
 - **Context:** Scaffold uses Qdrant; author has prior Chroma experience.
-- **Reasoning:** The assessment rewards a production-shaped answer: Qdrant runs as its own
-  container in docker-compose (which the task explicitly asks for), exposes scores + payload
-  filtering for explainable retrieval, and supports the 1000+ PDFs/hour scaling discussion.
+- **Reasoning:** Qdrant fits the production shape the task asks for: it runs as its own
+  container in docker-compose (which the task explicitly asks for), exposes match scores and
+  payload filtering so retrieval is inspectable, and supports the 1000+ PDFs/hour scaling discussion.
   Chroma is noted in `DESIGN.md` as the prototyping alternative considered and set aside.
 - **Action:** Keep Qdrant; document explainability (scores, payloads, filters) and the Chroma
   trade-off in `DESIGN.md`.
@@ -271,8 +271,9 @@ the refactor is core work, not polish.
   `all-MiniLM-L6-v2` checkpoint) at build time so the container starts offline with no runtime
   download, which is consistent with the fully-open, reproducible goal. Compose runs two services: `app`
   and `qdrant` (official `qdrant/qdrant` image) with a persistent volume; `QDRANT_HOST=qdrant` is
-  injected via environment so the same image runs locally (`localhost`) or in Compose. `app` waits
-  on a Qdrant healthcheck. `OPENAI_*` stay optional env vars (RAG answer step only).
+  injected via environment so the same image runs locally (`localhost`) or in Compose. `app`
+  depends on `qdrant` only for start order; the Qdrant client connects lazily on the first request,
+  so no readiness gate is needed. `OPENAI_*` stay optional env vars (RAG answer step only).
 - **Status:** `decided`.
 
 ### D-11: Simplification pass (trim dead surface, justify the real extras)
