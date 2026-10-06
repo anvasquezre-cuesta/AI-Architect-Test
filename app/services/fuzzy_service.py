@@ -1,34 +1,53 @@
+"""Fuzzy matching between extracted names and requested name pairs."""
+
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
+
 from thefuzz import fuzz
 
+SIMILARITY_THRESHOLD = 90  # percent — required by the specification
 
-SIMILARITY_THRESHOLD = 70
+
+@runtime_checkable
+class NameMatcher(Protocol):
+    def match(self, extracted_names: list[str], query_names: list[dict]) -> list[dict]: ...
 
 
-def fuzzy_match_names(
-    extracted_names: list[str],
-    query_names: list[dict],
-) -> list[dict]:
-    """Perform fuzzy matching between extracted and query names."""
-    matches = []
+class TokenSortNameMatcher:
+    """Best extracted name per query name, kept if its score reaches the threshold.
 
-    for query in query_names:
-        query_full = f"{query['first_name']} {query['last_name']}"
+    Scores whole names with token_sort_ratio (typo-tolerant, insensitive to word
+    order and case). partial_ratio is deliberately not used: it scores a short
+    query as a substring match, so "Jo Sm" would match "John Smith".
+    """
 
-        best_match = None
-        best_score = 0
+    def __init__(self, threshold: int = SIMILARITY_THRESHOLD):
+        self._threshold = threshold
 
-        for extracted in extracted_names:
-            score = fuzz.partial_ratio(query_full, extracted)
+    @staticmethod
+    def normalize(name: str) -> str:
+        return " ".join(name.casefold().split())
 
-            if score > best_score:
-                best_score = score
-                best_match = extracted
+    def match(self, extracted_names: list[str], query_names: list[dict]) -> list[dict]:
+        matches = []
+        for query in query_names:
+            query_full = f"{query['first_name']} {query['last_name']}"
+            best_match, best_score = None, 0
+            for extracted in extracted_names:
+                score = fuzz.token_sort_ratio(self.normalize(query_full), self.normalize(extracted))
+                if score > best_score:
+                    best_match, best_score = extracted, score
+            if best_score >= self._threshold:
+                matches.append(
+                    {
+                        "extracted_name": best_match,
+                        "matched_name": query_full,
+                        "score": best_score / 100.0,
+                    }
+                )
+        return matches
 
-        if best_score >= SIMILARITY_THRESHOLD:
-            matches.append({
-                "extracted_name": best_match,
-                "matched_name": query_full,
-                "score": best_score / 100.0,
-            })
 
-    return matches
+# Scaffold API: module-level function from the original code, kept for the provided tests.
+fuzzy_match_names = TokenSortNameMatcher(SIMILARITY_THRESHOLD).match

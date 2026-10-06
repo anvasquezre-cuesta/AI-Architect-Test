@@ -1,7 +1,12 @@
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class BoundingBox(BaseModel):
+    """Box in PDF coordinate space (points, origin top-left of the page)."""
+
+    page_number: int = Field(ge=0, description="Zero-based page index")
     x: float
     y: float
     width: float
@@ -16,21 +21,52 @@ class ExtractedName(BaseModel):
 class FuzzyMatch(BaseModel):
     extracted_name: str
     matched_name: str
-    score: float
+    score: float = Field(ge=0.0, le=1.0)
 
 
 class ExtractionResponse(BaseModel):
     extracted_names: list[ExtractedName]
+    fuzzy_matches: list[FuzzyMatch]
 
 
 class NamePair(BaseModel):
-    first_name: str
-    last_name: str
+    first_name: str = Field(min_length=1)
+    last_name: str = Field(min_length=1)
 
 
 class RAGRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=2000)
 
 
 class RAGResponse(BaseModel):
     answer: str
+    sources: list[str]
+
+
+class IngestResponse(BaseModel):
+    status: str
+    document_id: str
+    chunks_stored: int
+
+
+class JobAccepted(BaseModel):
+    job_id: str
+    status: str
+    links: dict[str, str]
+
+
+class JobView(BaseModel):
+    job_id: str
+    status: str = Field(description="queued | running | succeeded | failed")
+    filename: str
+    page_count: int | None = None
+    attempts: int = 0
+    error: str | None = None
+    result: ExtractionResponse | None = None
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class HealthResponse(BaseModel):
+    status: str

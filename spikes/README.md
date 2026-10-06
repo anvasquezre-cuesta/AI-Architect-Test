@@ -1,0 +1,36 @@
+# Spikes
+
+Short, throwaway experiments that inform technology decisions before they are
+made in `app/`. Each spike answers one question with evidence (numbers,
+outputs, observations) and ends with a recommendation that feeds `DESIGN.md`.
+
+Spike code is not production code: it is not imported by `app/` and is not
+part of the test suite.
+
+## Layout
+
+```
+spikes/
+└── NN-short-name/
+    ├── README.md     # question, options compared, method, results, decision
+    ├── summary.json  # committed metrics for every configuration
+    ├── results/      # per-run output (git-ignored)
+    └── *.py          # runnable experiment(s)
+```
+
+After re-running a spike, refresh the summaries with `python3 spikes/summarize.py`.
+
+Run a spike with the project environment:
+
+```bash
+uv run python spikes/NN-short-name/<script>.py
+```
+
+## Index
+
+| # | Question | Status | Decision |
+|---|----------|--------|----------|
+| 01 | [OCR engine selection](01-ocr/README.md): Tesseract vs PaddleOCR (native/ONNX) vs Docling | decided | PaddleOCR PP-OCRv5 mobile on ONNX Runtime CPU |
+| 02 | [Person-name NER](02-ner/README.md): spaCy sm/trf vs BERT-NER vs GLiNER (local, no LLM call) | decided | GLiNER small, ONNX int8 on CPU, threshold 0.3 |
+| 03 | [Text embeddings](03-embeddings/README.md): 7 English models, semantic separation + retrieval | decided | bge-small-en-v1.5, ONNX CPU (served via fastembed) |
+| 04 | [Semantic answer cache](04-answer-cache/README.md): threshold + safety guard on spike 03 pairs | decided | cosine ≥ 0.90 + QuestionGuard (zero false hits) |

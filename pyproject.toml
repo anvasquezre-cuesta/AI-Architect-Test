@@ -1,0 +1,114 @@
+[project]
+name = "pdf-name-extractor"
+version = "0.1.0"
+description = "Extract names and bounding boxes from scanned PDFs, fuzzy-match them, and answer questions via RAG."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+# Core: needed whichever engines are selected.
+dependencies = [
+    "fastapi>=0.116,<1",
+    "uvicorn>=0.34.2,<1",
+    "python-multipart>=0.0.18",
+    "pymupdf==1.24.0",          # PDF rendering, used by every OCR engine
+    "thefuzz==0.22.1",
+    "python-Levenshtein==0.25.1",
+    "qdrant-client==1.11.0",
+    "pydantic>=2.11,<3",
+    "pydantic-settings>=2.5,<3",
+    "httpx>=0.27,<1",           # LLM HTTP client (runtime, not only tests)
+    "numpy>=1.26",
+    "structlog>=24.4",
+    "temporalio>=1.8",
+    "psycopg[binary]>=3.2",
+    "psycopg-pool>=3.2",
+    "alembic>=1.13",
+    "sqlalchemy>=2.0",
+]
+
+[project.optional-dependencies]
+# Engines selected by the spikes (spikes/01-03) — the production default.
+chosen = [
+    "rapidocr>=3.9,<4",         # PaddleOCR PP-OCRv5 mobile on ONNX Runtime
+    "onnxruntime>=1.20",
+    "gliner>=0.2.29,<0.3",      # GLiNER small v2.1, served as ONNX int8
+    "onnx>=1.17",               # GLiNER export/quantization
+    "torch>=2.4",               # required by the gliner package; CPU-only wheels on Linux
+    "fastembed>=0.5",           # bge-small-en-v1.5 on ONNX Runtime, no torch
+]
+# Reference engines exercised by the provided test suite.
+fallback = [
+    "pytesseract>=0.3.10",      # + the tesseract binary
+    "spacy>=3.8,<3.9",
+    "en-core-web-sm",
+    "sentence-transformers>=3.2",
+]
+agent = [
+    "bedrock-agentcore>=1.0",
+    "fastembed>=0.5",
+    "strands-agents[gemini]>=1.50",
+]
+
+[dependency-groups]
+dev = [
+    "detect-secrets>=1.5",
+    "mypy>=1.13",
+    "pre-commit>=4",
+    "pytest==8.3.0",
+    "pytest-asyncio==0.24.0",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "contract: same behaviour checked against every engine implementation (real models)",
+    "integration: end-to-end pipeline on the sample PDFs (real models)",
+]
+
+[tool.ruff]
+line-length = 120
+force-exclude = true  # apply excludes even when paths are passed explicitly (pre-commit does)
+target-version = "py312"
+# The provided test suite (tests/test_*.py, tests/conftest.py) is kept byte-for-byte as delivered.
+extend-exclude = ["spikes", "migrations/script.py.mako", "tests/test_*.py", "tests/conftest.py",
+                  "scripts/generate_test_pdfs.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "BLE", "RUF", "ASYNC", "S"]
+ignore = [
+    "S101",    # assert is fine in tests
+    "RUF001", "RUF002", "RUF003",  # typographic quotes/dashes in docstrings are intentional
+    "B008",    # FastAPI's Depends()/File() defaults are the idiom
+    "S608",    # SQL is parameterised; the f-string is only the statement_timeout integer
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B", "BLE", "SIM117", "RUF012"]
+"scripts/**" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests", "config", "components"]  # config/components: infra/ modules
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+files = ["app"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
